@@ -53,7 +53,7 @@ max_reads: 2
 3. 按内联规则判定等级，输出 findings
 4. 回传 `factors{}` 供 `sk_rules` 做三方对账
 
-> `dti`、`multi_lend` 是**确定性计算**。若笔数多，P5 应补 `scripts/cred.py`，
+> `dti`、`multi_lend` 是**确定性计算**。若笔数多，邱家杰（P5）应补 `scripts/cred.py`，
 > 不要让模型累加金额——算错会直接导致等级判错。
 
 ## 输出
