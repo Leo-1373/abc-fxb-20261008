@@ -2,6 +2,10 @@
 build/stage/
 dist/
 
+# 评测产物（系统回答落盘 + 跑分报告，每次跑都重新生成）
+eval/out/*
+!eval/out/.gitkeep
+
 # 临时文件
 tmp/
 

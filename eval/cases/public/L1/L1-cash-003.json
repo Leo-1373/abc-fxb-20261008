@@ -1,0 +1,38 @@
+{
+  "case_id": "L1-cash-003",
+  "tier": "L1",
+  "held_out": false,
+  "dim": ["cash"],
+  "stage": "贷前",
+  "question": "种菜的大棚户，申请 20 万建新大棚，麻烦看看流水有没有问题。",
+  "data": {
+    "declared_inc": 16000,
+    "purpose": "建设蔬菜大棚",
+    "apply_amount": 200000,
+    "period": { "from": "2025-03-01", "to": "2025-08-31" },
+    "txn": [
+      { "date": "2025-03-05", "amt": 28000,  "counterparty": "某蔬菜批发市场", "desc": "菜款结算",   "channel": "bank", "type": "transfer" },
+      { "date": "2025-03-18", "amt": -165000,"counterparty": "某钢结构公司",   "desc": "大棚钢架款", "channel": "bank", "type": "transfer" },
+      { "date": "2025-04-10", "amt": 31000,  "counterparty": "某蔬菜批发市场", "desc": "菜款结算",   "channel": "bank", "type": "transfer" },
+      { "date": "2025-04-25", "amt": -12000, "counterparty": "某农资经营部",   "desc": "有机肥款",   "channel": "bank", "type": "transfer" },
+      { "date": "2025-05-08", "amt": 29500,  "counterparty": "某蔬菜批发市场", "desc": "菜款结算",   "channel": "bank", "type": "transfer" },
+      { "date": "2025-05-22", "amt": -9000,  "counterparty": "某农资经营部",   "desc": "农药款",     "channel": "bank", "type": "transfer" },
+      { "date": "2025-06-11", "amt": 33000,  "counterparty": "某蔬菜批发市场", "desc": "菜款结算",   "channel": "bank", "type": "transfer" },
+      { "date": "2025-06-28", "amt": -15000, "counterparty": "某建材经营部",   "desc": "大棚膜款",   "channel": "bank", "type": "transfer" },
+      { "date": "2025-07-09", "amt": 30500,  "counterparty": "某蔬菜批发市场", "desc": "菜款结算",   "channel": "bank", "type": "transfer" },
+      { "date": "2025-07-25", "amt": -8000,  "counterparty": "某农资经营部",   "desc": "肥料款",     "channel": "bank", "type": "transfer" },
+      { "date": "2025-08-13", "amt": 32000,  "counterparty": "某蔬菜批发市场", "desc": "菜款结算",   "channel": "bank", "type": "transfer" },
+      { "date": "2025-08-28", "amt": -11000, "counterparty": "某农机服务部",   "desc": "滴灌设备",   "channel": "bank", "type": "transfer" }
+    ]
+  },
+  "expected": {
+    "risk_level": "低",
+    "should_find": [],
+    "should_not_find": ["资金用途偏离", "交易对手集中"],
+    "coverage_partial": false,
+    "expect_clarify": false
+  },
+  "tags": ["边界"],
+  "adversarial": false,
+  "note": "边界题：考『大额 ≠ 异常』。3 月一笔 16.5 万支出是全期最大单笔，收款方是钢结构公司——单看金额和对手名称很像资金挪用，但这笔是搭大棚的钢架款，与申报用途完全一致，不该报用途偏离。菜款全部来自同一家批发市场（农户卖菜的常规渠道），收入月月稳定在 3 万上下，也不该按对手集中处理。真正的考点是：别把正常的重资产投入读成挪用。"
+}

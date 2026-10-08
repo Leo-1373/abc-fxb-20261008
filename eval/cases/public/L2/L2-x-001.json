@@ -1,0 +1,51 @@
+{
+  "case_id": "L2-x-001",
+  "tier": "L2",
+  "held_out": false,
+  "dim": ["cash", "cred"],
+  "stage": "贷前",
+  "question": "这客户说月收入两万五，申请 25 万扩大养殖规模。流水和征信都在附件里，帮我看看他这收入靠不靠谱。",
+  "data": {
+    "declared_inc": 25000,
+    "purpose": "扩大养殖规模",
+    "apply_amount": 250000,
+    "period": { "from": "2025-01-01", "to": "2025-06-30" },
+    "txn": [
+      { "date": "2025-01-14", "amt": 8600,  "counterparty": "某畜禽购销公司", "desc": "生猪销售款", "channel": "bank", "type": "transfer" },
+      { "date": "2025-01-28", "amt": -4200, "counterparty": "某饲料经销部",   "desc": "饲料款",     "channel": "bank", "type": "transfer" },
+      { "date": "2025-02-12", "amt": 9100,  "counterparty": "某畜禽购销公司", "desc": "生猪销售款", "channel": "bank", "type": "transfer" },
+      { "date": "2025-02-26", "amt": -3800, "counterparty": "某饲料经销部",   "desc": "饲料款",     "channel": "bank", "type": "transfer" },
+      { "date": "2025-03-15", "amt": 7400,  "counterparty": "某畜禽购销公司", "desc": "生猪销售款", "channel": "bank", "type": "transfer" },
+      { "date": "2025-03-29", "amt": -4600, "counterparty": "某兽药经营部",   "desc": "兽药款",     "channel": "bank", "type": "transfer" },
+      { "date": "2025-04-16", "amt": 8900,  "counterparty": "某畜禽购销公司", "desc": "生猪销售款", "channel": "bank", "type": "transfer" },
+      { "date": "2025-04-30", "amt": -5200, "counterparty": "某饲料经销部",   "desc": "饲料款",     "channel": "bank", "type": "transfer" },
+      { "date": "2025-05-13", "amt": 6200,  "counterparty": "某畜禽购销公司", "desc": "生猪销售款", "channel": "bank", "type": "transfer" },
+      { "date": "2025-05-27", "amt": -3900, "counterparty": "某饲料经销部",   "desc": "饲料款",     "channel": "bank", "type": "transfer" },
+      { "date": "2025-06-18", "amt": 9500,  "counterparty": "某畜禽购销公司", "desc": "生猪销售款", "channel": "bank", "type": "transfer" },
+      { "date": "2025-06-30", "amt": -4100, "counterparty": "某饲料经销部",   "desc": "饲料款",     "channel": "bank", "type": "transfer" }
+    ],
+    "credit": {
+      "overdue_max_days": 0,
+      "overdue_24m": 0,
+      "multi_lend": 2,
+      "dti": 0.38,
+      "query_3m": 2,
+      "card_util": 0.30,
+      "guarantee_bal": 50000,
+      "credit_hist_len": 60,
+      "settled_recent": 0,
+      "bad_debt": 0,
+      "dishonest_executed": 0
+    }
+  },
+  "expected": {
+    "risk_level": "高",
+    "should_find": ["申报收入与流水不符"],
+    "should_not_find": [],
+    "coverage_partial": false,
+    "expect_clarify": false
+  },
+  "tags": ["正例"],
+  "adversarial": false,
+  "note": "L2 单环节题，考『多个维度合起来才看得出问题』。单看流水没问题：月月有稳定销售款，波动不大，对手固定。单看征信也没问题：无逾期、负债率 0.38、担保 5 万。但把申报收入和流水摆在一起就对不上了——申报月收入 2.5 万，半年流水月均进账只有 8300 左右，差了三倍。这个矛盾必须把两边数据放在一起才能发现，正是指望专家做『三方对账』的地方。"
+}

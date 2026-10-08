@@ -1,0 +1,38 @@
+{
+  "case_id": "L1-cash-002",
+  "tier": "L1",
+  "held_out": false,
+  "dim": ["cash"],
+  "stage": "贷前",
+  "question": "种粮大户，流转了 500 亩地，想贷 15 万买台收割机，帮我看下他流水行不行？",
+  "data": {
+    "declared_inc": 21000,
+    "purpose": "购置收割机",
+    "apply_amount": 150000,
+    "period": { "from": "2025-01-01", "to": "2025-12-31" },
+    "txn": [
+      { "date": "2025-01-16", "amt": -32000, "counterparty": "某农资经销部",   "desc": "化肥款",     "channel": "bank", "type": "transfer" },
+      { "date": "2025-02-24", "amt": -18000, "counterparty": "某农资经销部",   "desc": "种子款",     "channel": "bank", "type": "transfer" },
+      { "date": "2025-03-12", "amt": -6500,  "counterparty": "某农机服务队",   "desc": "机耕费",     "channel": "bank", "type": "transfer" },
+      { "date": "2025-04-20", "amt": -9200,  "counterparty": "某农资经销部",   "desc": "农药款",     "channel": "bank", "type": "transfer" },
+      { "date": "2025-05-15", "amt": -4800,  "counterparty": "某农机服务队",   "desc": "植保费",     "channel": "bank", "type": "transfer" },
+      { "date": "2025-06-18", "amt": -7200,  "counterparty": "某农资经销部",   "desc": "追肥款",     "channel": "bank", "type": "transfer" },
+      { "date": "2025-07-22", "amt": -3500,  "counterparty": "某农机服务队",   "desc": "灌溉费",     "channel": "bank", "type": "transfer" },
+      { "date": "2025-08-14", "amt": -2600,  "counterparty": "某农资经销部",   "desc": "农药款",     "channel": "bank", "type": "transfer" },
+      { "date": "2025-09-20", "amt": 9000,   "counterparty": "某粮食购销公司", "desc": "零星售粮",   "channel": "bank", "type": "transfer" },
+      { "date": "2025-10-18", "amt": 168000, "counterparty": "某粮食购销公司", "desc": "秋粮销售款", "channel": "bank", "type": "transfer" },
+      { "date": "2025-11-06", "amt": 74000,  "counterparty": "某粮食购销公司", "desc": "秋粮销售款", "channel": "bank", "type": "transfer" },
+      { "date": "2025-12-10", "amt": 5600,   "counterparty": "某村民委员会",   "desc": "种粮补贴",   "channel": "bank", "type": "transfer" }
+    ]
+  },
+  "expected": {
+    "risk_level": "低",
+    "should_find": [],
+    "should_not_find": ["经营连续性中断", "收入波动大"],
+    "coverage_partial": false,
+    "expect_clarify": false
+  },
+  "tags": ["反例", "季节性"],
+  "adversarial": false,
+  "note": "经典的季节性场景，这题专治误报。1-8 月全是投入（化肥、种子、农药、机耕），没有进账；9 月起售粮，10-11 月秋粮款集中到账。这是种粮的正常节奏，不是『经营中断』，也不能按『收入波动大』处理。数据里 1-8 月零进账，正是最容易把季节性读成经营异常的地方。"
+}
