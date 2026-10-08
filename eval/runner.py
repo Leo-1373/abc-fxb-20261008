@@ -454,11 +454,78 @@ def write_report(path, results, problems):
         f.write("\n".join(lines) + "\n")
 
 
+def cmd_index(out_path, include_heldout=True):
+    """把题库导出成一份人看得懂的清单（题目文件本身是给电脑看的 JSON）。"""
+    cases, problems = collect(include_heldout)
+    if not cases:
+        print("[runner] 题库是空的。")
+        return 1
+
+    lines = ["# 题库总表", "",
+             "> 由 `python3 eval/runner.py --index` 自动生成，**不要手工编辑**。",
+             "> 题目本体是 JSON（给电脑看），这份表是给人看的。", ""]
+
+    # 概况
+    pub = [c for c, _, h in cases if not h]
+    held = [c for c, _, h in cases if h]
+    lines += ["## 概况", "",
+              "- 共 **%d** 道（公开 %d，藏起来 %d）" % (len(cases), len(pub), len(held)),
+              ""]
+    lines += ["| 档位 | 数量 |", "|---|---|"]
+    for tier in TIERS:
+        n = len([c for c, _, _ in cases if c.get("tier") == tier])
+        lines.append("| %s | %d |" % (tier, n))
+    lines += ["", "| 环节 | 数量 |", "|---|---|"]
+    for s in ("贷前", "贷中", "贷后", "跨环节"):
+        n = len([c for c, _, _ in cases if c.get("stage") == s])
+        lines.append("| %s | %d%s |" % (s, n, " ⚠" if n == 0 else ""))
+    lines.append("")
+
+    # 逐题
+    for tier in TIERS:
+        row = [(c, p, h) for c, p, h in cases if c.get("tier") == tier]
+        if not row:
+            continue
+        lines += ["## %s（%d 道）" % (tier, len(row)), ""]
+        for case, path, is_held in row:
+            exp = case.get("expected") or {}
+            tags = case.get("tags") or []
+            head = "### %s　%s" % (case.get("case_id"), case.get("question") or "")
+            if is_held:
+                head += "　🔒 **藏起来**"
+            if case.get("adversarial"):
+                head += "　🕳 **坑题**"
+            lines += [head, ""]
+            lines += ["- 环节：%s　维度：%s%s"
+                      % (case.get("stage"), "、".join(case.get("dim") or []),
+                         ("　标签：" + "、".join(tags)) if tags else "")]
+            find = exp.get("should_find") or []
+            avoid = exp.get("should_not_find") or []
+            lines.append("- 该报出来：%s" % ("、".join(find) if find else "（什么都不该报）"))
+            if avoid:
+                lines.append("- 不该报：%s" % "、".join(avoid))
+            if exp.get("expect_clarify"):
+                lines.append("- 应该做的是：**先追问，别硬答**")
+            if exp.get("coverage_partial"):
+                lines.append("- 应该标注：数据不全")
+            lines += ["- 出题人备注：%s" % (case.get("note") or "—"), ""]
+    if problems:
+        lines += ["## 写法问题", ""] + ["- %s：%s" % (n, e) for n, e in problems] + [""]
+
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    print("[runner] 题库总表已写出 → %s（共 %d 道）" % (out_path, len(cases)))
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="评测跑分工具（P6）")
     ap.add_argument("--list", action="store_true", help="看题库概况")
     ap.add_argument("--check", action="store_true", help="只校验题目写法")
     ap.add_argument("--score", metavar="DIR", help="用系统输出目录打分")
+    ap.add_argument("--index", metavar="PATH", nargs="?", const="docs/题库总表.md",
+                    help="导出人看得懂的题库清单（默认 docs/题库总表.md）")
     ap.add_argument("--include-heldout", action="store_true",
                     help="把藏起来的题也算进来（默认不算）")
     ap.add_argument("--report", metavar="PATH", help="把报告写成 markdown")
@@ -470,6 +537,11 @@ def main():
         return cmd_check(args.include_heldout)
     if args.score:
         return cmd_score(args.score, args.include_heldout, args.report)
+    if args.index:
+        path = args.index
+        if not os.path.isabs(path):
+            path = os.path.join(ROOT, path)
+        return cmd_index(path, True)
     ap.print_help()
     return 0
 
