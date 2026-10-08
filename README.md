@@ -71,7 +71,7 @@ main/         大堂经理的说明书
 skills/       5 位专家的说明书（_template 是新建用的模板）
 build/        打包工具
 eval/         自测工具
-docs/         交付说明.md ← 想快速上手先读这个
+docs/         交付说明.md（先读这个）、分工.md（谁干什么）
 dist/         打包好的成品
 ```
 
@@ -79,6 +79,7 @@ dist/         打包好的成品
 
 ## 想快速上手
 
-读 [`docs/交付说明.md`](docs/交付说明.md)，里面写清了分工、怎么自测、以及容易踩的坑。
+1. 读 [`docs/交付说明.md`](docs/交付说明.md)——我们在做什么、怎么自测、容易踩的坑
+2. 读 [`docs/分工.md`](docs/分工.md)——找到自己那一节，看要产出什么、怎么算做完
 
 想照着写一个新专家，看 `skills/sk_cash/skill.md`（最完整的范例）和 `skills/_template/skill.md`（模板）。
