@@ -5,6 +5,9 @@ dist/
 # 临时文件
 tmp/
 
+# macOS
+.DS_Store
+
 # Python
 __pycache__/
 *.py[cod]

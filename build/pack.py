@@ -29,6 +29,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PLACEHOLDER = "<!--INLINE_RULES-->"
 IGNORE_EXT = {".pyc", ".pyo"}
 IGNORE_DIR = {"__pycache__", ".pytest_cache"}
+# 目录占位文件与 macOS 垃圾文件：仓库里需要它才能保留空目录，但不该进交付产物
+IGNORE_FILE = {".gitkeep", ".DS_Store"}
 
 
 def copy_tree(src, dst):
@@ -39,7 +41,7 @@ def copy_tree(src, dst):
         target = dst if rel == "." else os.path.join(dst, rel)
         os.makedirs(target, exist_ok=True)
         for fn in files:
-            if os.path.splitext(fn)[1] in IGNORE_EXT:
+            if os.path.splitext(fn)[1] in IGNORE_EXT or fn in IGNORE_FILE:
                 continue
             shutil.copy2(os.path.join(root, fn), os.path.join(target, fn))
 
@@ -72,6 +74,8 @@ def zip_dir(src, out_zip):
         for root, dirs, files in os.walk(src):
             dirs[:] = [d for d in dirs if d not in IGNORE_DIR]
             for fn in sorted(files):
+                if fn in IGNORE_FILE:
+                    continue
                 full = os.path.join(root, fn)
                 arc = os.path.relpath(full, src).replace(os.sep, "/")
                 z.write(full, arc)
