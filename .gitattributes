@@ -1,0 +1,8 @@
+# 统一换行符为 LF。6 人协作时若不统一，Windows/macOS 之间会出现
+# "整个文件都变了"的假 diff，把真正的改动淹没掉。
+* text=auto eol=lf
+
+# 二进制
+*.png binary
+*.jpg binary
+*.zip binary

@@ -1,0 +1,71 @@
+# 短码字典 · 农户贷款风险防控
+# 契约：IF-4.2。所有 rules.yaml 的 cond 表达式只能用本文件已定义的短码。
+# 新增短码走 P1 评审；禁止在 cond 里临时发明变量。
+#
+# 列定义： code | dim | 中文名 | 类型 | 取值/单位 | 计算口径
+# 计算口径列写明"由哪来的、怎么算"，保证不同人实现出的数值可比。
+
+version: 1.0.0
+contract: v1
+
+columns: code|dim|name|type|range|derivation
+
+vars: |
+  # ── dim=doc 资料核查 ────────────────────────────────────────────
+  doc_miss_cnt|doc|缺件数|int|>=0|必备材料清单中缺失的项数
+  doc_expired_cnt|doc|过期件数|int|>=0|证照/证明超出有效期的项数
+  doc_inconsist_cnt|doc|不一致项数|int|>=0|跨材料同一事实矛盾处数（姓名/面积/金额/日期）
+  id_valid|doc|证件有效|bool|0/1|身份证在有效期内且与申请人一致
+  land_right_match|doc|权证与申报一致|bool|0/1|土地承包/经营权证面积与申报一致
+  sign_complete|doc|签章完整|bool|0/1|合同/申请表签章齐全
+
+  # ── dim=cash 流水分析 ──────────────────────────────────────────
+  inc_mean|money|月均入账|float|元|统计期内月均入账金额（剔除互转/冲正）
+  inc_cv|float|收入变异系数|float|>=0|月入账标准差 / 月均入账；>0.5 视为不稳
+  gap_cnt|cash|断档月数|int|>=0|连续无入账 >=1 个自然月的次数
+  top1_share|cash|最大对手占比|float|0-1|单一交易对手入账额 / 总入账额
+  in_out_ratio|cash|进出比|float|>=0|统计期总入账 / 总出账
+  bal_min|cash|最低余额|float|元|统计期内最低日终余额
+  loan_use_dev|cash|用途偏离度|float|0-1|与申报用途无关的大额出账占比
+  night_txn_share|cash|非经营时段占比|float|0-1|22:00-06:00 交易笔数占比
+  cash_inc_ratio|cash|现金入账占比|float|0-1|现金存入 / 总入账；过高说明收入难验证
+
+  # ── dim=cred 征信负债 ──────────────────────────────────────────
+  dti|cred|债务收入比|float|0-1|月均还款额 / 月均收入
+  multi_lend|cred|多头借贷家数|int|>=0|非银+同业在贷机构数
+  overdue_24m|cred|近24月逾期次数|int|>=0|征信报告逾期次数合计
+  overdue_max_days|cred|最长逾期天数|int|>=0|单次最长逾期天数
+  query_3m|cred|近3月查询次数|int|>=0|贷款审批/信用卡审批类查询次数
+  guarantee_bal|cred|对外担保余额|float|元|对外担保未结清金额（或有负债）
+  card_util|cred|贷记卡使用率|float|0-1|已用额度 / 总授信额度
+  credit_hist_len|cred|信用历史长度|int|月|首贷至今月数
+  settled_recent|cred|近期结清异常|bool|0/1|放款前 3 月内集中结清大额贷款
+
+  # ── dim=x 跨域（仅 sk_rules 可引用）────────────────────────────
+  declared_inc|money|申报收入|float|元|申请表/收入证明申报的月收入
+  income_est|money|流水估算收入|float|元|由 cash 维度测算的经营净收入
+  inc_gap_ratio|x|申报流水差异比|float|>=0|declared_inc / income_est
+  total_debt|x|总负债|float|元|征信在贷余额 + guarantee_bal
+  collat_ratio|x|抵押覆盖率|float|>=0|抵押物评估值 / 申请额度
+  doc_risk_link|x|缺件风险映射|bool|0/1|doc_miss_cnt 是否命中准入类缺件清单
+  dim_conflict|x|维度结论冲突|bool|0/1|两个及以上 skill 对同一事实给出不同判定
+
+  # ── dim=ew 贷后预警 ────────────────────────────────────────────
+  overdue_days|ew|当前逾期天数|int|>=0|当前逾期天数，0 表示正常
+  repay_delay_cnt|ew|还款延迟次数|int|>=0|历史延迟还款（未逾期）次数
+  bal_drop|ew|余额下降率|float|0-1|(上期余额-本期余额)/上期余额，提前还款除外
+  use_dev_flag|ew|用途偏离标记|bool|0/1|贷后资金流向与约定用途不符
+  biz_abnormal|ew|经营异常标记|bool|0/1|歇业/注销/涉诉/行政处罚
+  contact_fail|ew|失联标记|bool|0/1|连续 2 次回访未取得有效联系
+  natural_disaster|ew|受灾标记|bool|0/1|所在地发生气象/病虫害灾害
+  price_shock|ew|价格冲击标记|bool|0/1|主营农产品价格同比跌幅超阈值
+  guarantee_deplete|ew|担保弱化标记|bool|0/1|抵押物贬值/保证人代偿能力下降
+
+# 阈值分组：同一口径在不同环节的取值差异（供 stage_adaptation 引用）
+thresholds: |
+  # 变量|贷前|贷中|贷后
+  inc_cv|0.5|0.5|0.7
+  dti|0.5|0.55|0.6
+  top1_share|0.6|0.6|0.7
+  query_3m|6|8|-
+  card_util|0.8|0.85|0.9

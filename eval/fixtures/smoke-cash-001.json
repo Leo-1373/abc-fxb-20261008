@@ -1,0 +1,27 @@
+{
+  "_note": "冒烟 fixture，用于验证构建链路与 sk_cash 脚本行为。不是正式评测集（正式集由 P6 独立造题，见 docs/评测方案.md）。",
+  "_scenario": "种植大户张某申请 10 万元购农机。收入高度依赖单一合作社，期中一笔建筑公司工程款异常，且大额出账用于购车。",
+  "declared_inc": 18000,
+  "purpose": "购买农机",
+  "period": { "from": "2025-01-01", "to": "2025-06-30" },
+  "txn": [
+    { "date": "2025-01-08", "amt": 32000,  "counterparty": "某农机合作社", "desc": "货款",   "channel": "bank", "type": "transfer" },
+    { "date": "2025-01-15", "amt": -12000, "counterparty": "某农资经销部", "desc": "化肥",   "channel": "bank", "type": "transfer" },
+    { "date": "2025-01-20", "amt": -3000,  "counterparty": "某超市",       "desc": "日用",   "channel": "pos",  "type": "consume" },
+    { "date": "2025-02-10", "amt": 8000,   "counterparty": "某农机合作社", "desc": "货款",   "channel": "bank", "type": "transfer" },
+    { "date": "2025-03-05", "amt": 9500,   "counterparty": "某农机合作社", "desc": "货款",   "channel": "bank", "type": "transfer" },
+    { "date": "2025-04-12", "amt": 41000,  "counterparty": "某建筑公司",   "desc": "工程款", "channel": "bank", "type": "transfer" },
+    { "date": "2025-04-20", "amt": -38000, "counterparty": "某汽车销售公司","desc": "购车",  "channel": "bank", "type": "transfer" },
+    { "date": "2025-05-18", "amt": 7000,   "counterparty": "某农机合作社", "desc": "货款",   "channel": "bank", "type": "transfer" },
+    { "date": "2025-06-22", "amt": 6800,   "counterparty": "某农机合作社", "desc": "货款",   "channel": "bank", "type": "transfer" },
+    { "date": "2025-06-25", "amt": -4000,  "counterparty": "某农资经销部", "desc": "农药",   "channel": "bank", "type": "transfer" }
+  ],
+  "_expected_metrics": {
+    "inc_cv_gt": 0.5,
+    "top1_share_gt": 0.6,
+    "loan_use_dev_gt": 0.3,
+    "gap_cnt": 0,
+    "bal_min_gt": 0
+  },
+  "_expected_hits": ["R106", "R104", "R102"]
+}

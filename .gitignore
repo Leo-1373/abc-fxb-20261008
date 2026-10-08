@@ -1,0 +1,11 @@
+# 构建产物（由 build/pack.py 重新生成，不入库）
+build/stage/
+dist/
+
+# 临时文件
+tmp/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/

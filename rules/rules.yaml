@@ -1,0 +1,109 @@
+# 规则库 · 单一事实来源（SSOT）
+# 契约：IF-4。表驱动编码，一行一条。
+# 构建期由 build/distribute_rules.py 按 owner 列切片分发到各 zip，
+# 由 build/check_closure.py 校验闭包完整性。
+#
+# ⚠ 本文件不打包。各 skill 只拿到 rules.closure.md（本包闭包内的切片）。
+# ⚠ 修改本文件后必须重跑 build/pack.py，否则各包规则会漂移。
+
+version: 1.0.0
+contract: v1
+owner_default: sk_rules
+
+columns: id|dim|cond|level|title|advice|basis|owner
+
+# 跨维度输入白名单：这些变量由主智能体直接下发，任何 skill 均可引用。
+# 白名单之外的变量只能来自本 skill 自己的计算，或上游 skill 的输出键。
+shared_inputs: |
+  declared_inc   # 申请表申报月收入，主智能体下发
+  stage          # 环节（贷前/贷中/贷后）
+
+# 计算依赖：cond 中出现的变量若不在本 skill 能力内，必须由这些上游提供。
+# 校验脚本据此判断"某规则的 owner 能否独立求值"。
+upstream: |
+  income_est     <- sk_cash
+  total_debt     <- sk_cred
+  inc_gap_ratio  <- 由 declared_inc 与 income_est 派生，仅 sk_rules 可算
+  collat_ratio   <- 由主智能体下发抵押物评估值与申请额度
+  dim_conflict   <- sk_rules 内部产生
+  doc_risk_link  <- sk_rules 内部产生（需 doc 维度 findings）
+
+rules: |
+  # 列序： id|dim|cond|level|title|advice|basis|owner
+  # title 是风险点名称（名词短语，≤12字），advice 是处置建议（动词短语）。
+
+  # ── dim=doc · owner=sk_doc ────────────────────────────────────
+  R001|doc|doc_miss_cnt>=3|高|材料大量缺失|暂缓受理并补齐材料|资料核查要点1|sk_doc
+  R002|doc|doc_miss_cnt>=1 && doc_miss_cnt<=2|中|材料部分缺失|限期补齐缺件|资料核查要点1|sk_doc
+  R003|doc|doc_expired_cnt>=1|中|证照过期|更换有效证照|资料核查要点2|sk_doc
+  R004|doc|doc_inconsist_cnt>=1|高|材料相互矛盾|核实材料矛盾项|资料核查要点3|sk_doc
+  R005|doc|id_valid==0|高|身份证核验不通过|重新核验身份|资料核查要点4|sk_doc
+  R006|doc|land_right_match==0|高|土地权属与申报不符|核实土地权属|资料核查要点5|sk_doc
+  R007|doc|sign_complete==0|中|签章不完整|补签章后受理|资料核查要点6|sk_doc
+  R008|doc|doc_inconsist_cnt>=3|高|材料系统性矛盾|全面复核申请材料|资料核查要点3|sk_doc
+
+  # ── dim=cash · owner=sk_cash ──────────────────────────────────
+  R101|cash|inc_cv>0.5 && gap_cnt>=3|高|收入波动叠加断档|核实收入波动原因|流水分析要点3|sk_cash
+  R102|cash|inc_cv>0.5|中|收入稳定性不足|关注收入稳定性|流水分析要点3|sk_cash
+  R103|cash|gap_cnt>=3|中|经营连续性中断|核实经营连续性|流水分析要点4|sk_cash
+  R104|cash|top1_share>0.6|中|交易对手集中|核实主要交易对手|流水分析要点7|sk_cash
+  R105|cash|top1_share>0.85|高|单一对手高度依赖|核实对手依赖风险|流水分析要点7|sk_cash
+  R106|cash|loan_use_dev>0.3|高|资金用途偏离|核实资金真实去向|流水分析要点11|sk_cash
+  R107|cash|in_out_ratio<0.9|中|资金净流出|核实经营现金流|流水分析要点5|sk_cash
+  R108|cash|bal_min<=0|高|账户曾透支|核实账户透支原因|流水分析要点6|sk_cash
+  R109|cash|night_txn_share>0.3|低|非经营时段交易偏多|留意交易时段异常|流水分析要点9|sk_cash
+  R110|cash|cash_inc_ratio>0.7|中|现金收入占比过高|核实现金收入来源|流水分析要点10|sk_cash
+  R111|cash|inc_cv>0.7 && top1_share>0.7|高|收入不稳且对手单一|核实收入可持续性|流水分析要点3+7|sk_cash
+  R112|cash|loan_use_dev>0.1 && loan_use_dev<=0.3|中|资金用途轻微偏离|补充用途说明|流水分析要点11|sk_cash
+
+  # ── dim=cred · owner=sk_cred ──────────────────────────────────
+  R201|cred|dti>0.55|高|负债率超限|压降额度或追加担保|征信审查要点2|sk_cred
+  R202|cred|dti>0.5 && dti<=0.55|中|负债率偏高|关注还款压力|征信审查要点2|sk_cred
+  R203|cred|multi_lend>=4|高|多头借贷|核实多头融资用途|征信审查要点9|sk_cred
+  R204|cred|multi_lend>=2 && multi_lend<=3|中|存在多头借贷迹象|关注新增融资|征信审查要点9|sk_cred
+  R205|cred|overdue_max_days>=90|高|严重逾期历史|审慎准入|征信审查要点4|sk_cred
+  R206|cred|overdue_max_days>=30 && overdue_max_days<90|中|逾期超30天|核实逾期原因|征信审查要点4|sk_cred
+  R207|cred|overdue_24m>=3|中|逾期频次偏高|关注还款意愿|征信审查要点4|sk_cred
+  R208|cred|query_3m>=8|高|征信查询异常|核实集中申贷原因|征信审查要点11|sk_cred
+  R209|cred|query_3m>=6 && query_3m<8|中|征信查询偏多|关注融资需求|征信审查要点11|sk_cred
+  R210|cred|card_util>0.85|中|贷记卡高使用率|核实流动性状况|征信审查要点7|sk_cred
+  R211|cred|guarantee_bal>declared_inc*6|高|对外担保过重|核实或有负债|征信审查要点13|sk_cred
+  R212|cred|credit_hist_len<12|中|信用历史过短|参考替代数据|征信审查要点3|sk_cred
+  R213|cred|settled_recent==1|中|放款前集中结清|核实结清资金来源|征信审查要点15|sk_cred
+
+  # ── dim=x 跨域 · owner=sk_rules（仅此处可做跨维度判定）─────────
+  X001|x|inc_gap_ratio>1.5|高|申报收入高于流水测算|核实收入真实性|交叉验证规则1|sk_rules
+  X002|x|inc_gap_ratio<0.6|中|申报收入低于流水测算|复核申报口径|交叉验证规则1|sk_rules
+  X003|x|total_debt>income_est*24|高|总负债超年收入两倍|压降负债或追加担保|交叉验证规则2|sk_rules
+  X004|x|collat_ratio<1.0|高|抵押覆盖不足|追加担保或压降额度|交叉验证规则4|sk_rules
+  X005|x|collat_ratio>=1.0 && collat_ratio<1.3|中|抵押覆盖偏低|关注押品价值波动|交叉验证规则4|sk_rules
+  X006|x|dim_conflict==1|高|维度结论冲突|人工复核冲突结论|交叉验证规则6|sk_rules
+  X007|x|doc_risk_link==1|高|缺件触及准入红线|补齐红线材料|交叉验证规则3|sk_rules
+  X008|x|inc_gap_ratio>1.5 && dti>0.5|高|收入虚高叠加高负债|审慎准入|交叉验证规则1+2|sk_rules
+
+  # ── dim=ew · owner=sk_ew ──────────────────────────────────────
+  E001|ew|overdue_days>=1 && overdue_days<=30|中|出现逾期|电话催收并核实原因|贷后预警信号1|sk_ew
+  E002|ew|overdue_days>30 && overdue_days<=90|高|逾期超30天|现场催收并评估处置|贷后预警信号1|sk_ew
+  E003|ew|overdue_days>90|高|逾期超90天转不良|启动资产保全|贷后预警信号1|sk_ew
+  E004|ew|use_dev_flag==1|高|贷后资金用途偏离|要求说明资金去向|贷后预警信号3|sk_ew
+  E005|ew|biz_abnormal==1|高|经营主体异常|核实经营存续状态|贷后预警信号5|sk_ew
+  E006|ew|contact_fail==1|中|客户失联|上门走访核实|贷后预警信号8|sk_ew
+  E007|ew|bal_drop>0.5|低|余额大幅下降|继续观察余额变动|贷后预警信号4|sk_ew
+  E008|ew|repay_delay_cnt>=3|中|还款延迟频繁|提示还款纪律|贷后预警信号2|sk_ew
+  E009|ew|natural_disaster==1|高|遭受自然灾害|核实损失并评估展期|贷后预警信号6|sk_ew
+  E010|ew|price_shock==1|中|主营产品价格冲击|评估收入影响|贷后预警信号7|sk_ew
+  E011|ew|guarantee_deplete==1|高|担保弱化|追加担保或压降|贷后预警信号9|sk_ew
+
+# 等级合成规则（仅 sk_rules 使用，契约 D2）
+# 输入：全部 finding 的 level 集合  →  输出：整体 risk.level
+level_synthesis: |
+  任一条 高            => 整体 高
+  仅 中（无高）        => 整体 中
+  仅 低 / 无 finding   => 整体 低
+  冲突消解：同 id 多条 finding 取最高 level；dim_conflict 存在时强制 高
+  置信度：任一命中规则 conf<0.6 时，整体等级标注"待核实"后缀
+
+# 内联 top-N：这些规则直接写进对应 skill.md 正文，保证"没工具也能跑"
+# 选入标准：高频命中 或 是等级判定的关键路径
+inline_topn: |
+  R001,R004,R005,R006,R101,R105,R106,R108,R201,R203,R205,R208,X001,X004,E002,E004,E005
