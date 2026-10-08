@@ -1,0 +1,46 @@
+{
+  "case_id": "L2-x-002",
+  "tier": "L2",
+  "held_out": false,
+  "dim": ["doc", "cred"],
+  "stage": "贷前",
+  "question": "客户拿自家的宅基地和房子做抵押，申请 30 万扩大养鸡场，评估报告也交了，帮我看下这笔能做吗？",
+  "data": {
+    "declared_inc": 15000,
+    "purpose": "扩大养鸡场",
+    "apply_amount": 300000,
+    "collateral_val": 200000,
+    "doc": [
+      { "name": "居民身份证",       "present": true, "expired": false },
+      { "name": "户口簿",           "present": true, "expired": false },
+      { "name": "不动产权证",       "present": true, "expired": false },
+      { "name": "抵押物评估报告",   "present": true, "expired": false },
+      { "name": "经营场所权属证明", "present": true, "expired": false },
+      { "name": "近六个月银行流水", "present": true, "expired": false },
+      { "name": "收入证明",         "present": true, "expired": false }
+    ],
+    "credit": {
+      "overdue_max_days": 0,
+      "overdue_24m": 0,
+      "multi_lend": 2,
+      "dti": 0.30,
+      "query_3m": 2,
+      "card_util": 0.20,
+      "guarantee_bal": 0,
+      "credit_hist_len": 66,
+      "settled_recent": 0,
+      "bad_debt": 0,
+      "dishonest_executed": 0
+    }
+  },
+  "expected": {
+    "risk_level": "高",
+    "should_find": ["抵押担保不足"],
+    "should_not_find": ["材料缺失", "证照过期", "收入波动大", "多头借贷", "逾期"],
+    "coverage_partial": false,
+    "expect_clarify": false
+  },
+  "tags": ["正例", "抵押物"],
+  "adversarial": false,
+  "note": "专考『抵押物不足』——原文点名要考的。申请 30 万，抵押物评估只值 20 万，覆盖率 0.67，明显不够，该报。这题的难处在『排除干扰』：材料七项齐全没过期、征信干净没有逾期、多头只有 2 家、负债率 0.30 也不高，所以除了抵押这一条，别的都不该报。要是系统一看到『抵押』两个字就顺手报个『材料缺失』，就是被关键词牵着走了。"
+}

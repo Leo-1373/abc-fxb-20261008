@@ -309,6 +309,13 @@ def cmd_list(include_heldout):
     for d, n in sorted(counter.items(), key=lambda x: -x[1]):
         print("     %-6s %3d 道" % (d, n))
 
+    # 环节最容易漏（赛题三个环节并列点名），单独列出来
+    print("\n   按环节：")
+    for s in ("贷前", "贷中", "贷后", "跨环节"):
+        n = len([c for c, _, _ in cases if c.get("stage") == s])
+        mark = "  ⚠ 一题都没有" if n == 0 else ""
+        print("     %-5s %3d 道%s" % (s, n, mark))
+
     adv = [c for c, _, _ in cases if c.get("adversarial")]
     print("\n   坑题：%d 道（目标 ≥10）%s" % (len(adv), "✓" if len(adv) >= 10 else "⚠"))
 

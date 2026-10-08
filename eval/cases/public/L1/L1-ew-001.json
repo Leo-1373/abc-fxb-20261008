@@ -1,0 +1,34 @@
+{
+  "case_id": "L1-ew-001",
+  "tier": "L1",
+  "held_out": false,
+  "dim": ["ew"],
+  "stage": "贷后",
+  "question": "这个客户贷后回访，麻烦看下有没有什么要盯的。",
+  "data": {
+    "monitor": {
+      "monitor_date": "2025-06-30",
+      "overdue_days": 0,
+      "overdue_periods": 0,
+      "repay_delay_cnt": 1,
+      "biz_status": "正常经营",
+      "contact": "可联系",
+      "use_dev_flag": 0,
+      "natural_disaster": 0,
+      "natural_disaster_desc": "",
+      "price_shock": 1,
+      "price_shock_desc": "生猪出栏价由 16 元/公斤跌至 11 元/公斤",
+      "bal_drop": 0.42
+    }
+  },
+  "expected": {
+    "risk_level": "中",
+    "should_find": ["主营产品价格冲击"],
+    "should_not_find": ["自然灾害", "客户失联", "经营主体异常", "贷后逾期"],
+    "coverage_partial": false,
+    "expect_clarify": false
+  },
+  "tags": ["正例", "市场因素"],
+  "adversarial": false,
+  "note": "专考『市场因素』，而且专考『市场 ≠ 天灾』。客户经营正常、联系得上、没逾期，唯一的坏消息是生猪出栏价从 16 元跌到 11 元——这是行情冲击，属于原文说的『市场因素』，该报。同时这道题是分辨力的试金石：数据里天灾一栏明确是 0，要是报了『自然灾害』就是张冠李戴。还款有 1 次延迟但没到『频繁』的程度，余额下降 0.42 也没到阈值，这两个都不该单独成风险点——顺带考『不到阈值别乱报』。"
+}

@@ -1,0 +1,57 @@
+{
+  "case_id": "L3-x-002",
+  "tier": "L3",
+  "held_out": false,
+  "dim": ["doc", "cash", "cred"],
+  "stage": "贷前",
+  "question": "这是首次申请，材料你帮我核一遍，流水和征信也一起过一下，最后给我个整体的风险结论。",
+  "data": {
+    "declared_inc": 20000,
+    "purpose": "经营周转",
+    "apply_amount": 150000,
+    "period": { "from": "2025-01-01", "to": "2025-06-30" },
+    "doc": [
+      { "name": "居民身份证",       "present": true,  "expired": false },
+      { "name": "户口簿",           "present": false, "expired": false },
+      { "name": "土地承包经营权证", "present": true,  "expired": true  },
+      { "name": "经营场所权属证明", "present": true,  "expired": false },
+      { "name": "近六个月银行流水", "present": true,  "expired": false },
+      { "name": "收入证明",         "present": false, "expired": false },
+      { "name": "购销合同",         "present": true,  "expired": false }
+    ],
+    "txn": [
+      { "date": "2025-01-20", "amt": 38000,  "counterparty": "某农业合作社", "desc": "货款", "channel": "bank", "type": "transfer" },
+      { "date": "2025-01-26", "amt": -12000, "counterparty": "某农资经销部", "desc": "化肥", "channel": "bank", "type": "transfer" },
+      { "date": "2025-02-18", "amt": 5200,   "counterparty": "某农业合作社", "desc": "货款", "channel": "bank", "type": "transfer" },
+      { "date": "2025-03-22", "amt": 34000,  "counterparty": "某农业合作社", "desc": "货款", "channel": "bank", "type": "transfer" },
+      { "date": "2025-03-28", "amt": -9500,  "counterparty": "某农资经销部", "desc": "种子", "channel": "bank", "type": "transfer" },
+      { "date": "2025-04-19", "amt": 4100,   "counterparty": "某农业合作社", "desc": "货款", "channel": "bank", "type": "transfer" },
+      { "date": "2025-05-24", "amt": 36000,  "counterparty": "某农业合作社", "desc": "货款", "channel": "bank", "type": "transfer" },
+      { "date": "2025-05-30", "amt": -11000, "counterparty": "某农资经销部", "desc": "农药", "channel": "bank", "type": "transfer" },
+      { "date": "2025-06-21", "amt": 4800,   "counterparty": "某农业合作社", "desc": "货款", "channel": "bank", "type": "transfer" }
+    ],
+    "credit": {
+      "overdue_max_days": 0,
+      "overdue_24m": 0,
+      "multi_lend": 5,
+      "dti": 0.42,
+      "query_3m": 3,
+      "card_util": 0.40,
+      "guarantee_bal": 0,
+      "credit_hist_len": 48,
+      "settled_recent": 0,
+      "bad_debt": 0,
+      "dishonest_executed": 0
+    }
+  },
+  "expected": {
+    "risk_level": "高",
+    "should_find": ["材料缺失", "证照过期", "收入波动大", "交易对手集中", "多头借贷"],
+    "should_not_find": ["账户透支", "抵押担保不足"],
+    "coverage_partial": false,
+    "expect_clarify": false
+  },
+  "tags": ["复合", "正例"],
+  "adversarial": false,
+  "note": "复合题，考『一次问三件事，一件都不许漏』。五个风险点散在三个维度里：材料少两项、土地证过期一项（材料维度），收入在 4000 到 38000 之间跳、全部回款来自同一家合作社（流水维度），在 5 家机构有授信（征信维度）。这题最容易出的毛病是『顾此失彼』——比如材料查得起劲，征信的多头就漏了。同时埋了一个反向考点：题目没给抵押物信息，所以『抵押担保不足』不该被报出来；余额信息也没有，『账户透支』同样不该出现。"
+}
