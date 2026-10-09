@@ -44,14 +44,28 @@ max_reads: 2
 
 ## 工作流
 
-1. 比对 `references/必备材料清单.md`（按环节取对应清单）→ 得 `doc_miss_cnt`
-2. 逐项校验有效期 → `doc_expired_cnt`；身份证与申请人一致性 → `id_valid`
-3. **跨材料比对同一事实**（姓名/面积/金额/日期）→ `doc_inconsist_cnt`
-4. 土地权证面积 vs 申报面积 → `land_right_match`；签章齐全性 → `sign_complete`
-5. 按内联规则判定等级，输出 findings
+1. **先跑脚本比对**——材料表不进上下文，脚本只回传 6 个短码与 `facts@doc`：
 
-> 本 skill 目前无脚本。若材料量大（>20 项），建议真超奇补 `scripts/check.py` 做字段级比对，
-> **比对是确定性的，不该让模型逐项看**。
+```bash
+PYTHONIOENCODING=utf-8 python scripts/check.py check \
+    --input doc.json --checklist references/必备材料清单.md --stage 贷前 --out facts.json
+```
+
+2. **再跑脚本求值**——规则命中由脚本判定，不由模型判：
+
+```bash
+PYTHONIOENCODING=utf-8 python scripts/check.py evaluate \
+    --facts facts.json --closure references/rules.closure.md --stage 贷前
+```
+
+3. **模型只做脚本做不到的事**：
+   - 判定脚本报出的**待定情形**（清单 §4 的情形树要按申报口径判断，脚本只做保守推断）；
+   - 识别清单未覆盖的**新材料类型**（脚本会把它计入 unknown，不当作缺件）。
+
+4. 组装 L1/L2 返回。
+
+> 脚本不可用时（平台无执行能力）→ 对照 `references/必备材料清单.md` 人工比对，按下方内联规则定级，
+> 并在输出标注 `coverage: partial`。**比对是确定性的，不该让模型逐项看**。
 
 ## 输出
 
