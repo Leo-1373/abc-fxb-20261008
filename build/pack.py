@@ -28,7 +28,15 @@ import ruleslib as RL
 HERE = os.path.dirname(os.path.abspath(__file__))
 PLACEHOLDER = "<!--INLINE_RULES-->"
 IGNORE_EXT = {".pyc", ".pyo"}
-IGNORE_DIR = {"__pycache__", ".pytest_cache"}
+IGNORE_DIR = {"__pycache__", ".pytest_cache", ".idea", ".vscode"}
+# 操作系统/编辑器生成的元数据文件：不是源文件，绝不能进交付包。
+# macOS 只要用 Finder 浏览过目录就会生成 .DS_Store——之前它被原样打进了
+# sk_cash.zip（+6KB）。按小写文件名匹配（大小写不敏感）。
+IGNORE_FILES = {".ds_store", "thumbs.db", "desktop.ini"}
+
+
+def _skip_file(fn):
+    return fn.lower() in IGNORE_FILES or os.path.splitext(fn)[1] in IGNORE_EXT
 
 
 def copy_tree(src, dst):
@@ -39,7 +47,7 @@ def copy_tree(src, dst):
         target = dst if rel == "." else os.path.join(dst, rel)
         os.makedirs(target, exist_ok=True)
         for fn in files:
-            if os.path.splitext(fn)[1] in IGNORE_EXT:
+            if _skip_file(fn):
                 continue
             shutil.copy2(os.path.join(root, fn), os.path.join(target, fn))
 
@@ -72,6 +80,8 @@ def zip_dir(src, out_zip):
         for root, dirs, files in os.walk(src):
             dirs[:] = [d for d in dirs if d not in IGNORE_DIR]
             for fn in sorted(files):
+                if _skip_file(fn):
+                    continue
                 full = os.path.join(root, fn)
                 arc = os.path.relpath(full, src).replace(os.sep, "/")
                 z.write(full, arc)

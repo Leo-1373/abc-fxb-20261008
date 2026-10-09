@@ -46,7 +46,11 @@ rules: |
   R101|cash|inc_cv>0.5 && gap_cnt>=3|高|收入波动叠加断档|核实收入波动原因|流水分析要点3|sk_cash
   R102|cash|inc_cv>0.5|中|收入稳定性不足|关注收入稳定性|流水分析要点3|sk_cash
   R103|cash|gap_cnt>=3|中|经营连续性中断|核实经营连续性|流水分析要点4|sk_cash
-  R104|cash|top1_share>0.6|中|交易对手集中|核实主要交易对手|流水分析要点7|sk_cash
+  # 分档原则：同一变量只用互不重叠的区间分档（P2 复审项）。
+  # R104 原为 top1_share>0.6，与 R105（>0.85 高）区间嵌套 → 同一现象出现"中+高"两个等级；
+  # 现收窄到 (0.6, 0.85]，与 R105 互补。经 eval/contract_tests.py 验证行为不变
+  # （冒烟 fixture 的 top1_share≈0.607，仍命中 R104 且不命中 R105）。
+  R104|cash|top1_share>0.6 && top1_share<=0.85|中|交易对手集中|核实主要交易对手|流水分析要点7|sk_cash
   R105|cash|top1_share>0.85|高|单一对手高度依赖|核实对手依赖风险|流水分析要点7|sk_cash
   R106|cash|loan_use_dev>0.3|高|资金用途偏离|核实资金真实去向|流水分析要点11|sk_cash
   R107|cash|in_out_ratio<0.9|中|资金净流出|核实经营现金流|流水分析要点5|sk_cash
@@ -70,6 +74,53 @@ rules: |
   R211|cred|guarantee_bal>declared_inc*6|高|对外担保过重|核实或有负债|征信审查要点13|sk_cred
   R212|cred|credit_hist_len<12|中|信用历史过短|参考替代数据|征信审查要点3|sk_cred
   R213|cred|settled_recent==1|中|放款前集中结清|核实结清资金来源|征信审查要点15|sk_cred
+
+  # ── dim=cred 扩容 · owner=sk_cred（P5 邱家杰补，13 → 41 条）──────
+  # 编码口径：阈值按**贷中（审批）**口径编码，与 dict.yaml thresholds 的"贷中"列一致。
+  # 贷前从严 / 贷后放宽由 sk_rules 结合 factors 与 thresholds 调整，本维度不自动改写规则。
+  # 分档原则：同一变量只用**互不重叠**的区间分档（如 R224 >0.9 高 / R225 0.7-0.9 中），
+  # 禁止出现两条规则对同一区间给出不同等级（P2 审核项）。
+  # R214 加 overdue_cur==0：否则与 R215（overdue_cur>=1 高）对**同一笔当前逾期**
+  # 同时命中，同一事实出现"低+高"两个等级。加此限定后 R214 只管"历史已结清的短期逾期"。
+  # 副作用：overdue_cur 缺失时 R214 被跳过（标 partial），符合"缺数据不猜"原则。
+  R214|cred|overdue_max_days>=1 && overdue_max_days<30 && overdue_cur==0|低|短期逾期记录|记录备查并提示客户|征信审查要点4|sk_cred
+  R215|cred|overdue_cur>=1|高|当前存在逾期|结清后方可准入|征信审查要点4|sk_cred
+  R216|cred|bad_debt_flag==1|高|存在呆账或代偿|一票否决并拒贷|征信审查要点5|sk_cred
+  # R217 原 advice 为"一票否决并拒贷"，与法释〔2017〕7号冲突（该规定设 2 年纳入期限、
+  # 4 种不得纳入情形、7 种应删除情形，不存在"法定禁入"）。改为要求核实状态与期限。
+  R217|cred|dishonest_flag==1|高|失信被执行人|核实失信状态与期限|征信审查要点6|sk_cred
+  R218|cred|lawsuit_flag==1|中|存在未结诉讼|核实诉讼进展|征信审查要点6|sk_cred
+  R219|cred|card_cnt>=6|中|贷记卡账户过多|核实授信总额|征信审查要点7|sk_cred
+  R220|cred|query_self_3m>=6|低|本人查询过频|关注融资焦虑|征信审查要点11|sk_cred
+  R221|cred|new_loan_3m>=3|高|近期集中新增贷款|核实新增融资用途|征信审查要点10|sk_cred
+  R222|cred|new_loan_3m>=1 && new_loan_3m<=2|中|近期存在新增贷款|关注融资节奏|征信审查要点10|sk_cred
+  R223|cred|new_loan_amt_3m>declared_inc*12|高|新增负债超年收入|核实资金缺口|征信审查要点10|sk_cred
+  R224|cred|unsecured_ratio>0.9|高|负债几乎无抵押|追加抵押或压降|征信审查要点12|sk_cred
+  R225|cred|unsecured_ratio>0.7 && unsecured_ratio<=0.9|中|信用类负债偏高|关注负债结构|征信审查要点12|sk_cred
+  R226|cred|short_term_ratio>0.7|中|短期负债占比过高|关注续贷依赖|征信审查要点12|sk_cred
+  R227|cred|guarantee_bal>declared_inc*3 && guarantee_bal<=declared_inc*6|中|对外担保偏重|核实或有负债|征信审查要点13|sk_cred
+  R228|cred|guarantee_cnt>=3|中|担保笔数偏多|核实担保对象|征信审查要点13|sk_cred
+  R229|cred|co_borrower_debt>declared_inc*12|高|共借人负债过重|合并评估还款能力|征信审查要点14|sk_cred
+  R230|cred|co_borrower_debt>declared_inc*6 && co_borrower_debt<=declared_inc*12|中|共借人负债偏高|合并测算家庭负债|征信审查要点14|sk_cred
+  R231|cred|settled_amt_recent>new_loan_amt_3m && new_loan_amt_3m>0|高|疑似以贷养贷|核实结清资金来源|征信审查要点15|sk_cred
+  R232|cred|credit_hist_len>=12 && credit_hist_len<24|低|信用历史偏短|参考替代数据|征信审查要点3|sk_cred
+  R233|cred|card_util>0.7 && card_util<=0.85|低|贷记卡使用率偏高|关注卡债水平|征信审查要点7|sk_cred
+  R234|cred|guarantee_overdue_flag==1|高|被担保债务已逾期|关注代偿风险|征信审查要点13|sk_cred
+  R235|cred|co_borrower_dishonest==1|高|共同借款人失信|合并认定失信|征信审查要点14|sk_cred
+  R236|cred|five_level_bad==1|高|存在非正常类贷款|核实五级分类|征信审查要点8|sk_cred
+  R237|cred|extension_cnt>=1 && extension_cnt<=2|中|存在展期记录|核实展期原因|征信审查要点8|sk_cred
+  R238|cred|extension_cnt>=3|高|频繁借新还旧|审慎准入|征信审查要点8|sk_cred
+  R239|cred|semi_card_overdraft==1|高|准贷记卡透支超限|核实透支情况|征信审查要点7|sk_cred
+  R240|cred|new_org_6m>=3|中|近半年新增授信机构|关注负债扩张|征信审查要点9|sk_cred
+  R241|cred|refinance_flag==1|高|本次用途为以贷还贷|核实真实用途|征信审查要点15|sk_cred
+
+  # ── dim=cred 扩容二 · 查询原因分布（分工.md 任务3 点名的缺口）──────────
+  # 人行官方对"查询次数多"的风险解释是**查询多但没有获批**（"…多次被不同的银行查询，
+  # 但…没有得到新贷款…可能会产生不利影响"，见要点11）。所以这两条把"次数"与"结果"
+  # 合起来看，补上纯次数阈值给不出的语义（被多家机构拒绝）。
+  # 等级与 R208/R209 保持一致（不升级），只让 title/advice 更准确——避免制造等级冲突。
+  R242|cred|query_3m>=6 && query_3m<8 && new_loan_3m==0|中|申贷集中但未获批|核实被拒原因|征信审查要点11|sk_cred
+  R243|cred|query_3m>=8 && new_loan_3m==0|高|集中申贷均未获批|核实被拒原因|征信审查要点11|sk_cred
 
   # ── dim=x 跨域 · owner=sk_rules（仅此处可做跨维度判定）─────────
   X001|x|inc_gap_ratio>1.5|高|申报收入高于流水测算|核实收入真实性|交叉验证规则1|sk_rules
@@ -106,4 +157,4 @@ level_synthesis: |
 # 内联 top-N：这些规则直接写进对应 skill.md 正文，保证"没工具也能跑"
 # 选入标准：高频命中 或 是等级判定的关键路径
 inline_topn: |
-  R001,R004,R005,R006,R101,R105,R106,R108,R201,R203,R205,R208,X001,X004,E002,E004,E005
+  R001,R004,R005,R006,R101,R105,R106,R108,R201,R203,R205,R208,R215,R216,R217,X001,X004,E002,E004,E005

@@ -1,20 +1,20 @@
----
-name: main_agent
-description: 农户贷款风险防控主智能体——意图识别、环节判定、复合问题拆解、子 skill 调度与风险识别结果汇总输出。
-version: 1.0.0
-contract: v1
-input_slots: [user_input, declared_inc, collateral_val, apply_amount, stage_hint]
-output_keys: [report{}]
-sub_skills: [sk_doc, sk_cash, sk_cred, sk_rules, sk_ew]
-refs_index:
-  - path: references/输出规范.md
-    when: 需要输出字段明细、填写范例或反面例子时
-  - path: references/组合宏库.md
-    when: 整句未命中正文组合宏，需查扩展宏时
-  - path: references/公共背景.md
-    when: 需要农户贷款业务背景、监管口径解释时
-max_reads: 1
----
+\---  
+name: main_agent  
+description: 农户贷款风险防控主智能体——意图识别、环节判定、复合问题拆解、子 skill 调度与风险识别结果汇总输出。  
+version: 1.0.0  
+contract: v1  
+input_slots: [user_input, declared_inc, collateral_val, apply_amount, stage_hint]  
+output_keys: [report{}]  
+sub_skills: [sk_doc, sk_cash, sk_cred, sk_rules, sk_ew]  
+refs_index:  
+  \- path: references/输出规范.md  
+    when: 需要输出字段明细、填写范例或反面例子时  
+  \- path: references/组合宏库.md  
+    when: 整句未命中正文组合宏，需查扩展宏时  
+  \- path: references/公共背景.md  
+    when: 需要农户贷款业务背景、监管口径解释时  
+max_reads: 1  
+\---
 
 # 农户贷款风险防控主智能体
 
@@ -103,13 +103,13 @@ M_CREDIT  |纯征信体检                => C3 -> C4
 
 调度子 skill 时，**只传该 skill `input_slots` 列出的字段**，其余一律不传。
 
-| 规则 | 说明 |
-|---|---|
-| 按槽裁剪 | 传 `sk_cash` 时不带 `credit{}`，反之亦然 |
-| 高基数前置 | 原始流水/交易明细**不经过本智能体**，直接由 `sk_cash` 的脚本读取 |
+| 规则      | 说明                                             |
+| ------- | ---------------------------------------------- |
+| 按槽裁剪    | 传 `sk_cash` 时不带 `credit{}`，反之亦然                |
+| 高基数前置   | 原始流水/交易明细**不经过本智能体**，直接由 `sk_cash` 的脚本读取       |
 | 默认只收 L1 | 子 skill 回流的只有 `F\|id\|level\|title\|stage` 摘要行 |
-| 按需索取 L2 | **仅当 `level=高`** 或需写入报告证据链时，才索取该 id 的证据明细 |
-| 低风险不展开 | `中`/`低` 的明细永不进本上下文 |
+| 按需索取 L2 | **仅当 `level=高`** 或需写入报告证据链时，才索取该 id 的证据明细      |
+| 低风险不展开  | `中`/`低` 的明细永不进本上下文                             |
 
 **子 skill 输出有双重开销**（生成一次 + 回流后作为输入再算一次），因此上述「默认只收 L1」是收益最大的单条优化。
 
@@ -142,22 +142,22 @@ M_CREDIT  |纯征信体检                => C3 -> C4
 
 ## 七、异常与降级
 
-| 情形 | 处理 |
-|---|---|
+| 情形                             | 处理                                           |
+| ------------------------------ | -------------------------------------------- |
 | 子 skill 返回 `coverage: partial` | 照常汇总，`coverage.partial=true` + `note` 注明缺失维度 |
-| 某子 skill 调用失败 | 继续其余分支，`note` 记录失败 skill，**不中断整体** |
-| 输入缺少关键槽 | 输出 `risk.level` 置空 + `actions` 填追问项，**不臆测** |
-| 问题超出农户贷款范围 | 明确回复不适用，不做降级猜测 |
-| 维度结论冲突 | 交由 `sk_rules` 仲裁（`dim_conflict`），本智能体不自行判定 |
+| 某子 skill 调用失败                  | 继续其余分支，`note` 记录失败 skill，**不中断整体**           |
+| 输入缺少关键槽                        | 输出 `risk.level` 置空 + `actions` 填追问项，**不臆测**  |
+| 问题超出农户贷款范围                     | 明确回复不适用，不做降级猜测                               |
+| 维度结论冲突                         | 交由 `sk_rules` 仲裁（`dim_conflict`），本智能体不自行判定   |
 
 ---
 
 ## refs
 
-| 文件 | 何时读 |
-|---|---|
-| `references/输出规范.md` | 对输出字段/格式有疑问时 |
-| `references/组合宏库.md` | 整句未命中正文组合宏时 |
+| 文件                   | 何时读            |
+| -------------------- | -------------- |
+| `references/输出规范.md` | 对输出字段/格式有疑问时   |
+| `references/组合宏库.md` | 整句未命中正文组合宏时    |
 | `references/公共背景.md` | 需要业务背景或监管口径解释时 |
 
 > `max_reads: 1`——一次对话最多读 1 个 refs 文件。**路由表本身常驻正文，不需读取。**

@@ -9,3 +9,10 @@ tmp/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+
+# 操作系统/编辑器元数据（macOS Finder 一浏览就会生成）
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/

@@ -40,6 +40,28 @@ vars: |
   card_util|cred|贷记卡使用率|float|0-1|已用额度 / 总授信额度
   credit_hist_len|cred|信用历史长度|int|月|首贷至今月数
   settled_recent|cred|近期结清异常|bool|0/1|放款前 3 月内集中结清大额贷款
+  # ── 以下 20 个短码由 P5（邱家杰）在规则扩容时按需新增，已用于 R214-R241。
+  #    契约 IF-4.2 规定新增短码需 P1 评审；评审通过前请勿在其他 skill 的 cond 中引用。
+  overdue_cur|cred|当前逾期笔数|int|>=0|征信报告中当前逾期未结清的账户笔数
+  bad_debt_flag|cred|呆账代偿标记|bool|0/1|存在呆账/代偿/核销记录
+  dishonest_flag|cred|失信被执行标记|bool|0/1|被列入失信被执行人名单
+  lawsuit_flag|cred|未结诉讼标记|bool|0/1|存在未结诉讼或执行案件
+  card_cnt|cred|贷记卡账户数|int|>=0|征信报告中贷记卡账户总数（含准贷记卡）
+  query_self_3m|cred|近3月本人查询次数|int|>=0|本人临柜/线上自助查询次数（非审批类）
+  new_loan_3m|cred|近3月新增贷款笔数|int|>=0|近 3 个月新发放贷款笔数
+  new_loan_amt_3m|cred|近3月新增贷款额|money|元|近 3 个月新发放贷款合同金额合计
+  settled_amt_recent|cred|放款前结清金额|money|元|本次申请前 3 月内集中结清的贷款金额合计
+  unsecured_ratio|cred|信用类负债占比|float|0-1|信用/保证类在贷余额 / 在贷总余额；无余额明细时为 None
+  short_term_ratio|cred|短期负债占比|float|0-1|剩余期限 <=12 月在贷余额 / 在贷总余额；无期限明细时为 None
+  guarantee_cnt|cred|对外担保笔数|int|>=0|对外担保未结清笔数
+  co_borrower_debt|cred|共借人负债余额|money|元|共同借款人（配偶/合伙人）名下限有负债余额合计
+  guarantee_overdue_flag|cred|被担保债务逾期|bool|0/1|本户对外担保的债务已发生逾期或代偿
+  co_borrower_dishonest|cred|共借人失信标记|bool|0/1|共同借款人被列入失信被执行人名单
+  five_level_bad|cred|非正常类贷款|bool|0/1|存在关注/次级/可疑/损失类贷款
+  extension_cnt|cred|展期借新次数|int|>=0|历史展期或借新还旧累计次数
+  semi_card_overdraft|cred|准贷记卡透支|bool|0/1|准贷记卡透支超过 60 天未还
+  new_org_6m|cred|近6月新增授信机构|int|>=0|近 6 个月新发生授信的机构家数
+  refinance_flag|cred|以贷还贷用途|bool|0/1|本次申报用途为偿还他行贷款或置换旧债
 
   # ── dim=x 跨域（仅 sk_rules 可引用）────────────────────────────
   declared_inc|money|申报收入|float|元|申请表/收入证明申报的月收入
