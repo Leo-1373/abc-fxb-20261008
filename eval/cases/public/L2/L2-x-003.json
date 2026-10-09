@@ -1,0 +1,44 @@
+{
+  "case_id": "L2-x-003",
+  "tier": "L2",
+  "held_out": false,
+  "dim": ["cash", "cred"],
+  "stage": "贷中",
+  "question": "这个客户审批已经过了，下周就放款，放款前帮我把账再过一遍，看看有没有什么要留意的。",
+  "data": {
+    "declared_inc": 15000,
+    "purpose": "购置农资",
+    "apply_amount": 300000,
+    "period": { "from": "2025-06-01", "to": "2025-06-21" },
+    "txn": [
+      { "date": "2025-06-03", "amt": 12000,   "counterparty": "某农机合作社",     "desc": "货款",         "channel": "bank", "type": "transfer" },
+      { "date": "2025-06-05", "amt": -4200,   "counterparty": "某农资经销部",     "desc": "化肥款",       "channel": "bank", "type": "transfer" },
+      { "date": "2025-06-18", "amt": 250000,  "counterparty": "某自然人",         "desc": "短期借款",     "channel": "bank", "type": "transfer" },
+      { "date": "2025-06-19", "amt": -178000, "counterparty": "某商业银行",       "desc": "提前结清贷款", "channel": "bank", "type": "transfer" },
+      { "date": "2025-06-20", "amt": -65000,  "counterparty": "某小额贷款公司",   "desc": "结清欠款",     "channel": "bank", "type": "transfer" }
+    ],
+    "credit": {
+      "overdue_max_days": 0,
+      "overdue_24m": 0,
+      "multi_lend": 2,
+      "dti": 0.35,
+      "query_3m": 3,
+      "card_util": 0.25,
+      "guarantee_bal": 0,
+      "credit_hist_len": 60,
+      "settled_recent": 1,
+      "bad_debt": 0,
+      "dishonest_executed": 0
+    }
+  },
+  "expected": {
+    "risk_level": "高",
+    "should_find": ["疑似过桥资金"],
+    "should_not_find": ["逾期", "材料缺失", "抵押担保不足"],
+    "coverage_partial": false,
+    "expect_clarify": false
+  },
+  "tags": ["正例", "贷中", "反欺诈"],
+  "adversarial": false,
+  "note": "贷中环节题（原文点名的三个痛点之一，以前一道都没有）。考的是放款前的最后一道关：6 月 18 日突然进账 25 万、备注『短期借款』，紧接着两天内 17.8 万结清他行贷款、6.5 万还掉小贷公司——进的是短期拆借款，出的全是还债，付款日和放款日几乎挨着。这是典型的『以贷还贷 / 过桥』特征，属于欺诈嫌疑，该在放款前拦下来。征信的『近期集中结清』标记也印证了这一点。等级定『高』是我的业务判断（欺诈嫌疑应当在放款前人工核实），如果队里觉得该归到『中』，请在复盘时提出——这正是独立出题该发现的规则偏差。"
+}

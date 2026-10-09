@@ -1,0 +1,51 @@
+{
+  "case_id": "L3-x-901",
+  "tier": "L3",
+  "held_out": false,
+  "dim": ["ew", "doc"],
+  "stage": "贷后",
+  "question": "这个客户贷后已经逾期两期了，你帮我调一下他当初申请时交的材料，看看还有没有别的问题。",
+  "data": {
+    "monitor": {
+      "overdue_days": 45,
+      "overdue_periods": 2,
+      "repay_delay_cnt": 3,
+      "biz_status": "正常经营",
+      "contact": "可联系",
+      "use_dev_flag": 0,
+      "natural_disaster": 0
+    },
+    "doc": [
+      { "name": "居民身份证",         "present": true, "expired": false },
+      { "name": "户口簿",             "present": true, "expired": false },
+      { "name": "土地承包经营权证",   "present": true, "expired": false },
+      { "name": "经营场所权属证明",   "present": true, "expired": false },
+      { "name": "近六个月银行流水",   "present": true, "expired": false },
+      { "name": "收入证明",           "present": true, "expired": false },
+      { "name": "购销合同",           "present": true, "expired": false }
+    ],
+    "credit": {
+      "overdue_max_days": 45,
+      "overdue_24m": 2,
+      "multi_lend": 2,
+      "dti": 0.41,
+      "query_3m": 1,
+      "card_util": 0.25,
+      "guarantee_bal": 0,
+      "credit_hist_len": 72,
+      "settled_recent": 0,
+      "bad_debt": 0,
+      "dishonest_executed": 0
+    }
+  },
+  "expected": {
+    "risk_level": "高",
+    "should_find": ["贷后逾期"],
+    "should_not_find": ["材料缺失", "证照过期"],
+    "coverage_partial": false,
+    "expect_clarify": false
+  },
+  "tags": ["坑题", "诱导跑错"],
+  "adversarial": true,
+  "note": "坑题，考的是『别被话里的关键词带跑』。用户问的是贷后逾期处置，只是顺手提了一句『材料』，真正该做的是贷后预警（逾期 45 天、已逾两期、还有三次还款延迟，属于该现场催收并评估处置的情形）。但材料数据是齐全有效的——七项要件全在、全没过期，报任何材料类风险都是凭空捏造。一道题同时考两件事：找到正确的环节，以及不被『材料』两个字拐到材料核查上去。"
+}

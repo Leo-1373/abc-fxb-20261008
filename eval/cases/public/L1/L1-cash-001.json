@@ -1,0 +1,38 @@
+{
+  "case_id": "L1-cash-001",
+  "tier": "L1",
+  "held_out": false,
+  "dim": ["cash"],
+  "stage": "贷前",
+  "question": "这个客户跑运输的，申请 10 万块买车斗，帮我看下风险大不大？",
+  "data": {
+    "declared_inc": 18000,
+    "purpose": "购置货运车辆",
+    "apply_amount": 100000,
+    "period": { "from": "2025-01-01", "to": "2025-06-30" },
+    "txn": [
+      { "date": "2025-01-10", "amt": 42000,  "counterparty": "某物流有限公司",   "desc": "运费结算", "channel": "bank", "type": "transfer" },
+      { "date": "2025-01-22", "amt": -8500,  "counterparty": "某加油站",         "desc": "油费",     "channel": "pos",  "type": "consume" },
+      { "date": "2025-02-06", "amt": 16000,  "counterparty": "某建材有限公司",   "desc": "短途运费", "channel": "bank", "type": "transfer" },
+      { "date": "2025-02-22", "amt": -3200,  "counterparty": "某汽修厂",         "desc": "车辆维修", "channel": "bank", "type": "transfer" },
+      { "date": "2025-03-08", "amt": 5200,   "counterparty": "某物流有限公司",   "desc": "运费结算", "channel": "bank", "type": "transfer" },
+      { "date": "2025-03-24", "amt": -1200,  "counterparty": "某连锁超市",       "desc": "日用",     "channel": "pos",  "type": "consume" },
+      { "date": "2025-04-11", "amt": 38000,  "counterparty": "某物流有限公司",   "desc": "运费结算", "channel": "bank", "type": "transfer" },
+      { "date": "2025-04-27", "amt": -9200,  "counterparty": "某加油站",         "desc": "油费",     "channel": "pos",  "type": "consume" },
+      { "date": "2025-05-09", "amt": 4400,   "counterparty": "某个体货主",       "desc": "短途运输", "channel": "bank", "type": "transfer" },
+      { "date": "2025-05-18", "amt": -45000, "counterparty": "某建筑材料经营部", "desc": "建房用料", "channel": "bank", "type": "transfer" },
+      { "date": "2025-06-12", "amt": 3600,   "counterparty": "某建材有限公司",   "desc": "短途运费", "channel": "bank", "type": "transfer" },
+      { "date": "2025-06-26", "amt": -7800,  "counterparty": "某汽修厂",         "desc": "车辆大修", "channel": "bank", "type": "transfer" }
+    ]
+  },
+  "expected": {
+    "risk_level": "高",
+    "should_find": ["收入波动大", "交易对手集中", "资金用途偏离"],
+    "should_not_find": ["账户透支"],
+    "coverage_partial": false,
+    "expect_clarify": false
+  },
+  "tags": ["正例"],
+  "adversarial": false,
+  "note": "三个考点叠在一道题里：(1) 月收入从 4.2 万到 3600 元剧烈起伏，收入不稳；(2) 近八成收入来自同一家物流公司，对手高度集中；(3) 5 月一笔 4.5 万出账写明是建房用料，申报用途却是购车，用途明显偏离。出账均为经营或维修支出，余额未出现负数，不应报『账户透支』。"
+}

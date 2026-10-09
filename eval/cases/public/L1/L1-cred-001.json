@@ -1,0 +1,36 @@
+{
+  "case_id": "L1-cred-001",
+  "tier": "L1",
+  "held_out": false,
+  "dim": ["cred"],
+  "stage": "贷前",
+  "question": "种果树的，想贷 8 万块买套滴灌设备，帮我看下征信干净不干净。",
+  "data": {
+    "declared_inc": 12000,
+    "purpose": "购置滴灌设备",
+    "apply_amount": 80000,
+    "credit": {
+      "overdue_max_days": 0,
+      "overdue_24m": 0,
+      "multi_lend": 1,
+      "dti": 0.21,
+      "query_3m": 1,
+      "card_util": 0.15,
+      "guarantee_bal": 0,
+      "credit_hist_len": 84,
+      "settled_recent": 0,
+      "bad_debt": 0,
+      "dishonest_executed": 0
+    }
+  },
+  "expected": {
+    "risk_level": "低",
+    "should_find": [],
+    "should_not_find": ["逾期", "负债率超限", "多头借贷", "征信查询异常", "对外担保过重"],
+    "coverage_partial": false,
+    "expect_clarify": false
+  },
+  "tags": ["反例"],
+  "adversarial": false,
+  "note": "干净客户反例题，测的是『不乱报』。征信七年的历史里零逾期、负债率 0.21、只在一家机构有授信、近三个月只查过一次、没有对外担保。这题要是报出任何一条征信类风险，就是纯误报。凡是靠『有数据就报风险』刷敏感度的做法，都会在这道题上现原形。"
+}

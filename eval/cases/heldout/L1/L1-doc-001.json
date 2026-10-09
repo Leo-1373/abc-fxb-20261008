@@ -1,0 +1,32 @@
+{
+  "case_id": "L1-doc-001",
+  "tier": "L1",
+  "held_out": true,
+  "dim": ["doc"],
+  "stage": "贷前",
+  "question": "客户资料我传上去了，帮我核一下齐不齐、有没有到期的。",
+  "data": {
+    "declared_inc": 15000,
+    "purpose": "购置农机",
+    "apply_amount": 120000,
+    "doc": [
+      { "name": "居民身份证",       "present": true,  "expired": false },
+      { "name": "户口簿",           "present": false, "expired": false },
+      { "name": "土地承包经营权证", "present": true,  "expired": true  },
+      { "name": "经营场所权属证明", "present": false, "expired": false },
+      { "name": "近六个月银行流水", "present": true,  "expired": false },
+      { "name": "收入证明",         "present": false, "expired": false },
+      { "name": "购销合同",         "present": true,  "expired": false }
+    ]
+  },
+  "expected": {
+    "risk_level": null,
+    "should_find": ["材料缺失", "证照过期"],
+    "should_not_find": ["资金用途偏离", "账户透支"],
+    "coverage_partial": false,
+    "expect_clarify": false
+  },
+  "tags": ["正例"],
+  "adversarial": false,
+  "note": "held-out 示范题。七项要件里缺三项（户口簿、经营场所权属证明、收入证明），另有一项土地承包经营权证已过期，两件事都该报出来。这题只考『缺件和过期有没有被识别出来』，不考总体等级，所以 risk_level 留空——具体定什么档由业务规则说话。同时不该扯到资金用途或账户余额上去，数据里根本没有这两类信息。这是藏在 heldout/ 里的题，平时跑分不会碰，只在最后验收时用。"
+}
