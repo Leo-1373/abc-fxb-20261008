@@ -83,9 +83,34 @@ EXPIRED_SOON_DAYS = 30
 # 首贷检查期限：发放后 3 个月内（2020贷后办法第十五条）
 FIRST_CHECK_MONTHS = 3
 # 现场检查频次分档（2020贷后办法第二十一条(二)1/2）：信用、非信用两条尺子。
-# 低于起档的属「现场抽查」（按管理户数比例），不按固定次数考核 → 返回 None。
+# 区间**逐字照条文**——「信用30万（不含）到100万（含）」「非信用50万（不含）到
+# 200万（含）」→ 至少 1 次；「100万以上」「200万以上」→ 至少 2 次。
+# 端点开闭写错，30万整 / 100万整这种整数额度就会判错档，而这些正是最容易拿来出题的数。
+# 低于起档的属「现场抽查」（第二十一条(三)：信用 30万（含）以下按不低于 10%、非信用
+# 50万（含）以下按不低于 5% 考核）——那是按**管理户数比例**、不是按笔数，故返回 None。
 ONSITE_CHECK_TIERS = {"信用": [(300000, 1000000, 1), (1000000, None, 2)],
                       "非信用": [(500000, 2000000, 1), (2000000, None, 2)]}
+# 第二十一条(二)2 的例外：采用存单、凭证式国债、贵金属质押，以及政府背景担保公司、
+# 保证保险方式的，每年至少检查一次（不适用「至少两次」）。
+ONSITE_CHECK_EXEMPT = ("存单", "凭证式国债", "贵金属", "政府背景担保公司", "保证保险")
+# 「信用方式 / 非信用方式」（2020贷后办法第二十条、第二十一条(二)）的判定词。
+# ⚠ 不能写成 `"信用" in gua`——`"非信用"` 里也含「信用」，那样会把非信用贷款
+#   判成信用尺子，额度档随之整体错位。判不出来时返回 None，**不猜**（契约 IF-1.4）。
+NON_CREDIT_WORDS = ("保证", "抵押", "质押", "担保", "保险", "存单", "国债", "贵金属")
+
+
+def credit_bar(gua):
+    """担保方式 → '信用' / '非信用' / None（判不出）。
+
+    '非信用' 必须先于 '信用' 判定（前者是后者的超串）。
+    """
+    if "非信用" in gua:
+        return "非信用"
+    if "信用" in gua:
+        return "信用"
+    if any(w in gua for w in NON_CREDIT_WORDS):
+        return "非信用"
+    return None
 
 # 情形推断关键词。故意写得保守——宁可留给模型判（进 unresolved），也不要瞎猜。
 # 条件项没命中 → **不计入缺件**（必备材料清单 §0 纪律 2）。
@@ -423,19 +448,24 @@ def check(doc, applicant, stage, items, situations, as_of, known_types=None):
                 first_check_overdue_days = max(0, (done - due).days)
 
     # ⑨ 现场检查频次（2020贷后办法第二十一条(二)）：按额度与担保方式分档。
-    #    口径简化：监测期不足一年时按「每年至少 N 次」直接比 N 次，不做年度折算。
+    #    口径简化一：监测期不足一年时按「每年至少 N 次」直接比 N 次，不做年度折算。
+    #    口径简化二：「贷款期限超过三年的，从第四年开始每年至少一次」未实现
+    #                （input 里没有合同期限/到期日，不臆测）。
     #    低于起档额度的属"现场抽查"（按管理户数比例），没有固定次数 → None。
     onsite_check_shortfall = None
     if stage == "贷后":
         amt = _num(applicant.get("declared_amount"))
         gua = str(applicant.get("guarantee_type") or "")
-        bar = "信用" if ("信用" in gua and "保证" not in gua) else "非信用"
+        bar = credit_bar(gua)
         req = None
-        if amt:
+        if amt and bar:
             for lo, hi, n in ONSITE_CHECK_TIERS[bar]:
-                if amt >= lo and (hi is None or amt < hi):
+                # 端点严格照条文：> 下界（「不含」）、<= 上界（「（含）」）
+                if amt > lo and (hi is None or amt <= hi):
                     req = n
                     break
+        if req == 2 and any(w in gua for w in ONSITE_CHECK_EXEMPT):
+            req = 1
         if req is not None:
             onsite_check_shortfall = max(0, req - len(present.get("POST_CHECK_FORM", [])))
 
