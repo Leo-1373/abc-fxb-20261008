@@ -8,6 +8,12 @@
     --check             只校验题目本身写没写错（不调系统，纯静态检查）
     --score <dir>       用跑好的系统输出打分，出报告
 
+**--check 里那道键名交叉校验是干什么的？**
+    题目 `data` 里的键名，必须能在「各 skill.md 声明的输入槽 ∪ rules/dict.yaml 官方
+    短码」里找到。对不上的键 = skill 取不到值 = 规则静默失效：该报的没报、扣分，
+    但**全程不报错**。题目数据和 skill 输入契约是两个人分头写的，没有这道校验就
+    只能等打分时看见"漏报"，还查不出原因。
+
 **为什么不直接调系统？**
     平台怎么调用子 skill 还没定（李昊霖平台侦查未完成）。所以这里隔了一层文件：
     你先把系统对每道题的回答存成文件（文件名 = 题号），工具读文件来打分。
@@ -31,12 +37,15 @@ import re
 import sys
 import json
 import glob
+import difflib
 import argparse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CASES_DIR = os.path.join(ROOT, "eval", "cases")
 OUT_DIR = os.path.join(ROOT, "eval", "out")
 SYN_PATH = os.path.join(ROOT, "eval", "synonyms.json")
+DICT_PATH = os.path.join(ROOT, "rules", "dict.yaml")
+SKILLS_DIR = os.path.join(ROOT, "skills")
 
 TIERS = ("L1", "L2", "L3")
 DIMS = {"doc", "cash", "cred", "x", "ew"}
@@ -127,6 +136,109 @@ def load_system_output(path):
     return obj, (obj.get("usage") or {})
 
 
+# ────────────────── 键名交叉校验：题目 data vs skill 声明的槽位 ──────────────────
+
+# 需要钻进对象内部校验子字段的槽。这些槽的子字段是**官方短码级**的事实，
+# 名字写错会让规则静默失效（`bad_debt` vs `bad_debt_flag` 就是这么漏掉的，
+# 两条"一票否决"红线规则整整一周跑不到，而分数照扣、且不报错）。
+# `applicant{}` 是自由申报信息，子字段由各 skill 的 prose 约定、不是短码，
+# 钻进去只会产生误报，因此不列入。
+DEEP_SLOTS = ("credit", "features", "loan")
+
+_SLOT_CACHE = None
+
+
+def _codes_in_dict():
+    """rules/dict.yaml `vars:` 段里的官方短码（每行首列）。"""
+    out = {}
+    if not os.path.isfile(DICT_PATH):
+        return out
+    in_vars = False
+    for raw in open(DICT_PATH, encoding="utf-8"):
+        line = raw.rstrip("\n")
+        if re.match(r"^vars:\s*\|", line):
+            in_vars = True
+            continue
+        if in_vars and re.match(r"^\S", line):   # 顶格的下一段，vars 段到此结束
+            break
+        if not in_vars:
+            continue
+        p = [x.strip() for x in line.strip().split("|")]
+        if p and re.match(r"^[a-z_][a-z0-9_]*$", p[0]):
+            out[p[0]] = "dict.yaml"
+    return out
+
+
+def _slots_in_skills():
+    """各 skill.md 声明的输入槽：frontmatter 的 `input_slots` + 「## 输入」表里的字段名。"""
+    out = {}
+    if not os.path.isdir(SKILLS_DIR):
+        return out
+    for sk in sorted(os.listdir(SKILLS_DIR)):
+        path = os.path.join(SKILLS_DIR, sk, "skill.md")
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+        except Exception:
+            continue
+        names = set()
+        m = re.search(r"^input_slots:\s*(.+)$", text, re.M)
+        if m:
+            # 用标识符提取而非按逗号切：`[doc[], applicant{}, stage]` 里的 `[]`
+            # 会让"切到第一个 ]"的写法把 doc 截成 doc[
+            names |= set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", m.group(1)))
+        sec = re.search(r"^## 输入\s*$(.*?)^## ", text, re.M | re.S)
+        if sec:
+            names |= set(re.findall(r"`([A-Za-z_][A-Za-z0-9_]*)`", sec.group(1)))
+        for n in names:
+            out.setdefault(n, set()).add(sk)
+    return out
+
+
+def load_slots():
+    """合法字段名 → 谁声明的。扫全库一次，进程内缓存。"""
+    global _SLOT_CACHE
+    if _SLOT_CACHE is None:
+        declared = {}
+        for k, src in _codes_in_dict().items():
+            declared.setdefault(k, set()).add(src)
+        for k, sks in _slots_in_skills().items():
+            declared.setdefault(k, set()).update(sks)
+        _SLOT_CACHE = declared
+    return _SLOT_CACHE
+
+
+def _probe_key(key, where, declared, errs):
+    if key in declared:
+        return
+    near = difflib.get_close_matches(key, declared, n=1, cutoff=0.5)
+    if near:
+        hint = "；是不是想写 `%s`（%s 声明）？" % (near[0], "、".join(sorted(declared[near[0]])))
+    else:
+        hint = "；skills/*/skill.md 与 rules/dict.yaml 里都没有这个字段"
+    errs.append("%s 里的 `%s` 没被任何 skill 声明%s" % (where, key, hint))
+
+
+def check_slots(case, declared):
+    """题目 `data` 的键名是否都落在 skill 声明过的槽位里。
+
+    为什么必须查：题目数据（钱浩军）和 skill 输入契约（各 skill 作者）是两个人
+    在两个时间写的，谁也不知道对方用了什么名字。名字对不上时 skill 取不到值 →
+    规则不命中 → 该报的没报（漏报扣分），但**全程不报错**。这类静默失效
+    只能靠键名交叉校验抓出来。
+    """
+    errs = []
+    data = case.get("data") or {}
+    for key, val in data.items():
+        _probe_key(key, "data", declared, errs)
+        if key in DEEP_SLOTS and isinstance(val, dict):
+            for sub in val:
+                _probe_key(sub, "data.%s{}" % key, declared, errs)
+    return errs
+
+
 # ────────────────────────── 静态校验 ──────────────────────────
 
 def check_case(case, path, is_held):
@@ -158,6 +270,10 @@ def check_case(case, path, is_held):
 
     if not case.get("data"):
         errs.append("缺 data（客户资料）")
+    else:
+        declared = load_slots()
+        if declared:
+            errs.extend(check_slots(case, declared))
 
     for d in (case.get("dim") or []):
         if d not in DIMS:
@@ -208,7 +324,9 @@ def score_case(case, records, table):
 
     if rec is None:
         return {"case_id": cid, "status": "未跑", "miss": [], "false": [],
-                "level_ok": None, "unmatched": [], "detail": "找不到系统输出文件"}
+                "level_ok": None, "partial_ok": None, "clarify_ok": None,
+                "expect_partial": None, "actual_partial": None, "partial_fatal": False,
+                "unmatched": [], "detail": "找不到系统输出文件"}
 
     out, usage = rec
     titles = [p.get("title") for p in (out.get("points") or []) if isinstance(p, dict)]
@@ -233,10 +351,32 @@ def score_case(case, records, table):
     if exp.get("risk_level"):
         level_ok = actual_level == exp["risk_level"]
 
-    # 数据不全是否标注
+    # 数据不全是否标注 —— **双向**校验。
+    # 只查"该标没标"会漏掉另一半：题目数据齐全时系统仍喊"数据不全"，
+    # 是拿"不敢下结论"当挡箭牌，同样该扣分。而此前 `coverage_partial: false`
+    # 的题根本不验——那些题在系统什么都不报时天然通过，绿得毫无意义。
     partial_ok = None
-    if exp.get("coverage_partial"):
-        partial_ok = bool((out.get("coverage") or {}).get("partial"))
+    expect_partial = exp.get("coverage_partial")
+    actual_partial = None
+    if expect_partial is not None:
+        cov = out.get("coverage")
+        # coverage 有两种写法：子 skill 回传的字符串（`"partial"`）和主智能体
+        # 汇成对象（`{"partial": true}`）。两种都得认——双向校验现在每题都跑，
+        # 认不出形状会当场崩，而不是安静地漏一项。
+        if isinstance(cov, dict):
+            actual_partial = bool(cov.get("partial"))
+        else:
+            actual_partial = "partial" in str(cov or "").lower()
+        partial_ok = actual_partial == bool(expect_partial)
+
+    # 只有"该标没标"算硬失败。"不该标却标了"先只报出来、不判死——
+    # 因为 `partial` 的口径两组还没统一：
+    #   · docs/评测方案.md：数据缺**关键项**时填 true（题目的 false 是"没缺关键项"）
+    #   · sk_cred/契约 IF-1.4：**任一**指标算不出来就标 partial
+    # 一份 11 个字段的征信数据会让 cred.py 标出 18 项缺失 → 照契约行事的好系统
+    # 反而被这 6 道题判死。这是**取证**性质的分歧，不是笔误，得先裁决口径再收紧。
+    # 裁决前：报 ⚠ 不扣分。裁决后把 partial_ok 直接放进 passed 即可。
+    partial_fatal = bool(expect_partial) and partial_ok is False
 
     # 该不该追问
     clarify_ok = None
@@ -252,13 +392,15 @@ def score_case(case, records, table):
     unmatched = [t for t in titles if t not in claimed]
 
     passed = (not miss and not false_alarm
-              and level_ok is not False and partial_ok is not False
+              and level_ok is not False and not partial_fatal
               and clarify_ok is not False)
 
     return {
         "case_id": cid, "status": "通过" if passed else "失败",
         "miss": miss, "false": false_alarm,
         "level_ok": level_ok, "partial_ok": partial_ok, "clarify_ok": clarify_ok,
+        "expect_partial": expect_partial, "actual_partial": actual_partial,
+        "partial_fatal": partial_fatal,
         "expect_level": exp.get("risk_level") or "—",
         "actual_level": actual_level or "（空）",
         "unmatched": unmatched,
@@ -331,6 +473,9 @@ def cmd_check(include_heldout):
     if not cases:
         print("[runner] 没找到题目（默认只看公开题，加 --include-heldout 看全部）。")
         return 0
+    if not load_slots():
+        print("   ⚠ 没扫到任何 skill 声明（skills/*/skill.md、rules/dict.yaml 都读不到），"
+              "键名交叉校验已跳过")
     for name, e in problems:
         print("   ✗ %-24s %s" % (name, e))
     print()
@@ -381,6 +526,13 @@ def cmd_score(score_dir, include_heldout, report_path):
         if r["level_ok"] is False:
             print("       等级不对：期望 %s，系统报 %s"
                   % (r["expect_level"], r["actual_level"]))
+        if r["partial_fatal"]:
+            print("       该标数据不全却没标：期望标 partial，系统的 coverage 里没有")
+        elif r.get("partial_ok") is False:
+            print("       ⚠ 口径待裁决：题目说数据不缺关键项，系统标了 partial"
+                  "（不影响判定，见 partial 口径分歧）")
+        if r["clarify_ok"] is False:
+            print("       该追问却没追问：题目要求先问不要硬答")
         if r["status"] != "未跑" and r["unmatched"]:
             print("       待确认（没认出来的报出项）：%s" % "、".join(r["unmatched"]))
 
@@ -447,6 +599,15 @@ def write_report(path, results, problems):
         lines += ["- **%s**：%s" % (cid, "、".join(u)) for cid, u in unclear]
         lines += ["", "> 逐条判断：是系统多报了（误报），还是只是措辞不同没认上？",
                   "> 后者把词补进 `eval/synonyms.json` 即可。"]
+    overclaim = [r["case_id"] for r in done
+                 if r.get("partial_ok") is False and not r.get("partial_fatal")]
+    if overclaim:
+        lines += ["", "## ⚠ 口径待裁决：系统标了「数据不全」，题目说不缺关键项", "",
+                  "- " + "、".join(overclaim), "",
+                  "> 两组对 `partial` 的定义域不同，**暂不扣分**：",
+                  "> `docs/评测方案.md` 说「缺**关键项**才标」，`sk_cred` 契约说「**任一**指标",
+                  "> 算不出来就标」。一份 11 字段的征信数据会让 cred.py 标出 18 项缺失，",
+                  "> 于是照契约行事的好系统会被判成「过度标注」。口径统一前此项只报不判。"]
     if problems:
         lines += ["", "## 题目写法问题", ""]
         lines += ["- %s：%s" % (n, e) for n, e in problems]

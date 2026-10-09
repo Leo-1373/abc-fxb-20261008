@@ -43,7 +43,15 @@ max_reads: 2
 | 查询 | `query_3m`（**仅**贷款/信用卡审批类） `query_self_3m`（本人查询） |
 | 贷记卡 | `card_util` `card_cnt` `semi_card_overdraft` |
 | 负债与结构 | `guarantee_bal` `guarantee_cnt` `co_borrower_debt` `new_loan_3m` `new_loan_amt_3m` `new_org_6m` `settled_recent` `settled_amt_recent` `extension_cnt` `refinance_flag` |
+| 负债汇总值（可替代 `debt[]`） | `multi_lend` `dti` `debt_balance` `monthly_pay` `total_debt` `unsecured_ratio` `short_term_ratio` |
 | 记录类 | `credit_hist_len` `bad_debt_flag` `dishonest_flag` `lawsuit_flag` `five_level_bad` `guarantee_overdue_flag` `co_borrower_dishonest` |
+
+**负债汇总值**是征信报告自带的"贷款／贷记卡汇总"段，供应方常只抄汇总、不给逐笔明细。
+`debt[]` 不给时用它们兜底，**优先级恒为 `debt[]` 明细 > `credit{}` 汇总**：
+明细更准，且能暴露"明细之和 ≠ 汇总"的矛盾。兜底不影响 `coverage`——
+`debt[]` 仍记缺失，因为汇总值的精度低于逐笔，下游有权知道（契约 §1.4）。
+注意 `unsecured_ratio`／`short_term_ratio` **没有汇总口径**：信用类占比、短期占比
+必须逐笔的 `type`／`remain_months`／`balance` 才分得出来，这两个只能靠 `debt[]`。
 
 `debt[].type` 用"信用/保证/抵押/质押"（同义英文亦可）；"保证"计入无抵押敞口。
 `debt[].remain_months` 缺省 → `short_term_ratio = None`。
@@ -53,8 +61,12 @@ max_reads: 2
 | 情况 | 含义 | 处理 |
 |---|---|---|
 | 键缺失（`credit` 里没有这个字段） | 数据不可得 | 指标 `None` → 规则跳过 + 标 `partial` |
-| `debt` 键缺失 | **没给**在贷明细 | `multi_lend`/`dti` = `None`（不是 0） |
+| `debt` 键缺失，但 `credit` 有负债汇总值 | **没给**逐笔明细，只有报告汇总 | 指标取自汇总值（记 `used_summary`），`debt[]` 仍标 `partial` |
+| `debt` 键缺失，`credit` 也没汇总值 | 两份都没有 | `multi_lend`/`dti` = `None`（**不是 0**） |
 | `debt: []` | 确实**没有**负债 | `multi_lend = 0`、`dti = 0.0` |
+
+> 第三行是最危险的一格：把"没给数据"当成"没有负债"，会把高负债客户报成低风险，
+> 而且**不报错**。所以宁可 `None` + `partial`，绝不用 `0` 顶替。
 
 `declared_inc` 缺失 → `dti` 无法计算，相关规则跳过并在输出标注 `coverage: partial`。
 
@@ -141,7 +153,7 @@ coverage|partial|missing=declared_inc,dti
 
 | 码 | 含义 | 受影响的指标 |
 |---|---|---|
-| `debt[]` | 未提供在贷明细，或形状不是数组 | `multi_lend`、`dti`、`debt_balance`、`total_debt`、结构比率 |
+| `debt[]` | 未提供在贷明细，或形状不是数组 | 结构比率 `unsecured_ratio`／`short_term_ratio`（`multi_lend`/`dti` 若 `credit{}` 有汇总值则不受影响） |
 | `debt[].item` | 有明细项不是对象（已丢弃但标记） | 各项合计 |
 | `debt[].org` | 有明细项缺机构名 | **`multi_lend`**（否则静默低估多头家数） |
 | `debt[].balance` | 有明细项缺余额 | **`debt_balance`／`total_debt`**（部分和不等于总额） |

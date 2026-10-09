@@ -19,8 +19,8 @@
       "guarantee_bal": 0,
       "credit_hist_len": 84,
       "settled_recent": 0,
-      "bad_debt": 0,
-      "dishonest_executed": 0
+      "bad_debt_flag": 0,
+      "dishonest_flag": 0
     }
   },
   "expected": {

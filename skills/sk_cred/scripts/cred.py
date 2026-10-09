@@ -60,6 +60,20 @@ CREDIT_FLAGS = ["settled_recent", "bad_debt_flag", "dishonest_flag", "lawsuit_fl
                 "guarantee_overdue_flag", "co_borrower_dishonest", "five_level_bad",
                 "semi_card_overdraft", "refinance_flag"]
 
+# credit{} 里可以直接给的「征信报告汇总值」。征信报告本身带贷款/贷记卡汇总段，
+# 题目常常只抄汇总、不给 debt[] 逐笔明细；此前这类题上 multi_lend/dti 一律 None，
+# 导致依赖它们的 9 条规则在**每一道题**上都跑不到（R201/R202/R203/R204/R224/
+# R225/R226/X003/X008，其中高风险 5 条），而评测是绿的——should_not_find
+# 在"什么都不报"时天然通过。
+# 优先级恒为 **debt[] 明细 > credit{} 汇总**：明细更准，也更容易暴露
+# "明细之和 ≠ 汇总" 的矛盾。（矛盾交叉校验尚未做，属已知简化。）
+#
+# 注意汇总兜底救不了 R224/R225/R226：信用类占比、短期占比必须逐笔的
+# type/remain_months/balance 才分得出来，汇总值里没有。那三条要题目给 debt[]。
+CREDIT_SUMMARY_INTS = ["multi_lend"]
+CREDIT_SUMMARY_MONEY = ["debt_balance", "monthly_pay"]
+CREDIT_SUMMARY_FLOATS = ["dti", "unsecured_ratio", "short_term_ratio"]
+
 
 def read_text(path):
     with open(path, "r", encoding="utf-8") as f:
@@ -229,13 +243,49 @@ def aggregate(credit, debt, declared_inc=None):
         if declared_ok and not pay_missing:
             m["dti"] = round(monthly_pay / declared, 4)
 
+    # ── 汇总值兜底 ────────────────────────────────────────────────
+    # 逐笔明细不可得时，退到 credit{} 里的征信报告汇总值。
+    # 明细优先：`m[k] is None` 才覆盖，故 debt[] 给了值就不会被汇总顶掉。
+    # 注意这**不等于**"无负债"：`debt[]` 仍留在 missing 里，
+    # coverage.partial 照常置位——拿汇总值算出来的 dti 精度低于逐笔，
+    # 下游有权知道这一点（契约 §1.4：宁可标注，不可假装完整）。
+    used_summary = []
+    for k in CREDIT_SUMMARY_INTS:
+        if m.get(k) is None:
+            v = _int(c.get(k))
+            if v is not None:
+                m[k] = v
+                used_summary.append(k)
+    for k in CREDIT_SUMMARY_FLOATS:
+        if m.get(k) is None:
+            v = _num(c.get(k))
+            if v is not None:
+                m[k] = v
+                used_summary.append(k)
+    for k in CREDIT_SUMMARY_MONEY:
+        if k == "monthly_pay" and monthly_pay is None:
+            monthly_pay = _num(c.get(k))
+            if monthly_pay is not None:
+                used_summary.append(k)
+        elif k == "debt_balance" and debt_balance is None:
+            debt_balance = _num(c.get(k))
+            if debt_balance is not None:
+                used_summary.append(k)
+
+    # 汇总里直接给了 total_debt 就照用（dict.yaml 的官方短码，口径已声明）
+    given_total = _num(c.get("total_debt"))
+    if given_total is not None:
+        used_summary.append("total_debt")
+
     # total_debt：契约 IF-4 的 upstream 声明为 `total_debt <- sk_cred`，
     # 而 sk_cred/skill.md 的边界又写"不算 total_debt"。两处口径不一致（待金宇桐裁决）。
     # 本实现取**超集**：在贷余额、对外担保、以及二者之和都回传，
     # 这样无论裁决为"sk_cred 算"还是"sk_rules 算"，下游都不缺数据。
     # **只提供数值，不判"总负债超年收入"**——判定始终归 sk_rules 的 X003。
     # 任一加数不可得 → None（绝不用已知的那一半顶替，否则会低估总负债）。
-    if debt_balance is not None and m["guarantee_bal"] is not None:
+    if given_total is not None:
+        total_debt = round(given_total, 2)
+    elif debt_balance is not None and m["guarantee_bal"] is not None:
         total_debt = round(debt_balance + m["guarantee_bal"], 2)
     else:
         total_debt = None
@@ -247,6 +297,7 @@ def aggregate(credit, debt, declared_inc=None):
         "total_debt": total_debt,
         "n_debt": n_debt,
         "declared_inc": declared,
+        "used_summary": used_summary,
     }
     return m, meta, missing
 
