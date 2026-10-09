@@ -44,7 +44,7 @@ max_reads: 2
 
 ## 工作流
 
-1. **先跑脚本比对**——材料表不进上下文，脚本只回传 6 个短码与 `facts@doc`：
+1. **先跑脚本比对**——材料表不进上下文，脚本只回传短码与 `facts@doc`：
 
 ```bash
 PYTHONIOENCODING=utf-8 python scripts/check.py check \
@@ -70,18 +70,27 @@ PYTHONIOENCODING=utf-8 python scripts/check.py evaluate \
 ## 输出
 
 ```
-F|R004|高|核实材料矛盾项|贷前
-F|R001|高|补齐材料后再受理|贷前
-F|R003|中|更换有效证照|贷前
+F|R004|高|材料相互矛盾|贷前
+F|R006|高|土地权属与申报不符|贷前
+F|R002|中|材料部分缺失|贷前
+F|R003|中|证照过期|贷前
 ---
-R004|ev=doc.inconsist_cnt=2;doc.土地面积=12亩vs申报15亩|basis=资料核查要点3|conf=0.9
+R004|ev=doc.doc_inconsist_cnt=1|basis=必备材料清单7-18|conf=0.9
+R026|ev=doc.doc_inconsist_area_cnt=1|basis=必备材料清单7-23|conf=0.9
 ```
+
+（上面是 `eval/fixtures/smoke-doc-001.json` 的真实输出，按 `level` 降序。）
 
 同时回传 `facts@doc{}`（供 `sk_rules` 判 `doc_risk_link`）：
 
 ```
-facts@doc|miss_types=土地权证,收入证明|miss_cnt=2|redline_hit=1
+facts@doc|miss_types=银行流水,结算账户开立证明|miss_cnt=2|redline_hit=1|expired_types=SPOUSE_ID|inconsist=LAND_CERT.area=12≠申报15|stage=贷前
 ```
+
+短码不是只有 6 个：缺件**按类别拆**（身份/收入/用途/担保/经营/合同支付/检查/归档）、
+矛盾**按比对项拆**（姓名/证件号/面积/金额/日期），另有流程合规类
+（首贷检查超期、现场检查频次、受托支付金额）。逐条口径与"算不出来填 None"的边界见
+`references/必备材料清单.md` §8.1。
 
 ## 内联规则（top-N 高频）
 

@@ -31,7 +31,7 @@ max_reads: 2
 
 | 槽 | 形状 | 必需 | 说明 |
 |---|---|---|---|
-| `monitor_ts[]` | 对象数组 | 是 | 每项 `{date, overdue_days, balance, repay_delay_cnt, use_dev_flag, biz_abnormal, contact_fail, natural_disaster, price_shock, guarantee_deplete}` |
+| `monitor_ts[]` | 对象数组 | 是 | 每项 `{date, overdue_days, balance, repay_delay_cnt, use_dev_flag, biz_abnormal, contact_fail, natural_disaster, price_shock, guarantee_deplete}`，其余字段（信号11–41 所需）见 `references/贷后预警信号.md` §5。**每个时点都要给全同一套字段**——某字段只要有一个时点缺，引用它的信号在整条序列上都不判（跳过优于臆测） |
 | `signals` | str[] | 否 | 外部已上报的信号（如客户经理回访记录），用于补充 |
 | `loan{}` | 对象 | 否 | `{amount, balance, due_date, rate}`，用于处置建议的量化 |
 | `stage` | str | 否 | 缺省贷后 |
@@ -80,11 +80,17 @@ PYTHONIOENCODING=utf-8 python scripts/ew.py evaluate \
 ```
 A|E002|高|逾期超30天|升级|上门催收并评估处置
 A|E010|高|主营产品价格冲击|升级|评估收入影响
+A|E048|高|逾期持续恶化|升级|依法追偿
 A|AD4|低|客户失联|拟解除|确认后解除预警
 ---
 E002|ev=ew.overdue_days=52;ew.升级轨迹=正常>关注(1-30)>次级(31-90)|basis=贷后预警信号1|conf=0.95
 E010|ev=ew.price_shock=1;ew.升级轨迹=正常>关注(1-30)>次级(31-90)|basis=贷后预警信号7|conf=0.95
+E048|ev=ew.overdue_days=52;ew.signal_streak=3;ew.升级轨迹=正常>关注(1-30)>次级(31-90)|basis=贷后预警信号1|conf=0.95
 ```
+
+`E048` 与 `E002` 命中的是**同一笔逾期**，但说的不是一回事：`E002` 说"逾期超 30 天"（单点快照），
+`E048` 说"逾期**连续 3 个时点**没好转"（`signal_streak>=3`）——后者才是"动态预警"，
+也是本 skill 区别于 `sk_rules` 快照判定的地方。
 
 **L2 证据明细**：`<id>|ev=<指针>|basis=<出处>|conf=<0-1>`
 
