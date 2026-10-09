@@ -30,7 +30,7 @@ max_reads: 2
 
 | 槽 | 形状 | 必需 | 说明 |
 |---|---|---|---|
-| `doc[]` | 对象数组 | 是 | 每项 `{type, no, issue_date, expire_date, holder, fields{}}` |
+| `doc[]` | 对象数组 | 是 | 每项 `{type, no, issue_date, expire_date, holder, fields{}}`。**也接受 `{name, present, expired}`**（无 `type` 时按材料名回查清单；回查不到的记为 `unmapped_materials`，既不算缺件也不算已交）。详见 `references/必备材料清单.md` §8.2 |
 | `applicant{}` | 对象 | 是 | 申请人申报信息，用于跨材料比对 |
 | `stage` | str | 否 | 贷前/贷中/贷后，缺省贷前 |
 

@@ -163,6 +163,57 @@ def _num(v):
         return None
 
 
+# ── 输入形状兼容层 ─────────────────────────────────────────────────
+# 为什么必须有：契约 IF-3 声明的槽是 `monitor_ts[]`（**时点数组**），但上游给的
+# 可能是 `monitor{}`（**单对象快照**，题目里现在就是这个形状）。当前实现只读
+# `monitor_ts`，拿到单对象会**空转**：一条信号都不判、也不报错。
+# 单对象的正确处理是：当作 1 个时点跑，然后**明说时序判定不可用**——
+# 「连续 ≥2 个时点才升级」「最近 2 个时点消失才算拟解除」在 1 个时点上无意义。
+TS_ALIASES = {"monitor_date": "date", "业务日期": "date", "监测日期": "date"}
+BIZ_OK_WORDS = ("正常经营", "正常")
+CONTACT_OK_WORDS = ("可联系", "能联系", "可联络", "正常")
+
+
+def pick_series(data):
+    """从输入里取监测时点序列。返回 (序列, 降级说明)。
+
+    认三种写法：`monitor_ts[]` / `monitor[]` / `monitor{}`（单对象）。
+    后一种要带降级说明——它是快照，不是趋势。
+    """
+    for key in ("monitor_ts", "monitor"):
+        v = data.get(key)
+        if isinstance(v, list) and v:
+            return v, None
+        if isinstance(v, dict) and v:
+            return [v], ("输入给的是单对象快照（%s{}），只有 1 个监测时点 → "
+                         "升级/解除/跨档等**时序判定不可用**，coverage: partial" % key)
+    return None, None
+
+
+def normalize_ts(ts):
+    """单时点的字段名/取值适配。返回 (归一化时点, 说明列表)。
+
+    只翻译形状，**不改口径**：连续时点数、跨档、余额下降率仍按 契约 §3 算。
+    """
+    out, notes = {}, []
+    for k, v in (ts or {}).items():
+        out[TS_ALIASES.get(k, k)] = v
+    # 字符串状态 → 布尔标记（仅在布尔字段缺失时翻译，不覆盖已明确给出的值）
+    for src, dst, ok_words in (("biz_status", "biz_abnormal", BIZ_OK_WORDS),
+                               ("contact", "contact_fail", CONTACT_OK_WORDS)):
+        if out.get(dst) is None and isinstance(out.get(src), str) and out[src].strip():
+            s = out[src].strip()
+            out[dst] = 0 if any(w in s for w in ok_words) else 1
+            notes.append("按形状兼容把 %s=%r 翻成 %s=%d（口径见 B1 提案）"
+                         % (src, s, dst, out[dst]))
+    if out.get("bal_drop") is not None and out.get("balance") is None:
+        # 契约口径是 (上期余额-本期余额)/上期余额。输入直给一个数就有了两套口径，
+        # 迟早对不上——所以**不采信**，宁可不判这个信号（跳过优于臆测）。
+        notes.append("输入直接给了 bal_drop；契约口径由相邻两期余额现算，"
+                     "已忽略输入值（该信号可能因此不判）")
+    return out, notes
+
+
 def _timepoint_env(ts, prev_balance):
     """单时点 → 变量作用域。
 
@@ -203,9 +254,21 @@ def trend(monitor_ts, signals):
         # 退化输入：没有监测时点就没有"趋势"可言。返回空，绝不臆测。
         return None, None, None, ["monitor_ts 缺失或为空 → 无法做时序比对"], 0
 
+    # 时点字段的形状适配（见 normalize_ts）——只翻译形状，不改口径。
+    norm, tnote = [], []
+    for t in monitor_ts:
+        n, ns = normalize_ts(t)
+        norm.append(n)
+        for x in ns:
+            if x not in tnote:
+                tnote.append(x)
+    monitor_ts = norm
+    notes.extend(tnote)
+
     tss = sorted(monitor_ts, key=lambda t: str(t.get("date", "")))
     if len(tss) < 2:
-        notes.append("只有 1 个监测时点 → 无法判定升级/解除，全部按「新增」处理")
+        notes.append("只有 1 个监测时点 → 无法判定升级/解除，全部按「新增」处理"
+                     "（coverage: partial）")
 
     envs, bands, prev_bal = [], [], None
     for t in tss:
@@ -259,6 +322,9 @@ def trend(monitor_ts, signals):
         "overdue_band_crossed": crossed,
         "overdue_trajectory": ">".join(_band_label(b[0]) for b in bands),
         "n_ts": len(tss),
+        # 机器可读的降级标记：只有 1 个时点时，本 skill 的核心能力（时序判定）
+        # 不成立，调用方应据此标 coverage: partial 而不是当成完整结论。
+        "coverage": "partial" if len(tss) < 2 else "full",
         # 时序聚合量（贷后预警信号.md §3.1/§3.2 的可判定化）。
         # **只放数值/布尔**——`eval_cond` 的作用域会滤掉字符串，
         # 规则引用了 `overdue_band`/`overdue_trajectory` 只会被静默跳过。
@@ -439,7 +505,10 @@ def main():
         if err:
             print(json.dumps({"coverage": "partial", "reason": err}, ensure_ascii=False))
             return 0
-        latest, derived, states, notes, skipped = trend(data.get("monitor_ts"), signals)
+        series, sneak = pick_series(data)
+        if sneak:
+            print("# %s" % sneak)
+        latest, derived, states, notes, skipped = trend(series, signals)
         if latest is None:
             print(json.dumps({"coverage": "partial", "reason": notes[0],
                               "alerts": []}, ensure_ascii=False))
@@ -458,6 +527,9 @@ def main():
                 print("  %-8s %-12s %-4s %s" % (s["no"], s["name"], "低", "拟解除"))
         print("逾期轨迹：%s（跨档=%s）" % (derived["overdue_trajectory"],
                                           "是" if derived["overdue_band_crossed"] else "否"))
+        if derived.get("coverage") != "full":
+            print("# coverage: %s —— %s 个监测时点，时序能力不可用"
+                  % (derived.get("coverage"), derived.get("n_ts")))
         if args.out:
             open(args.out, "w", encoding="utf-8", newline="\n").write(
                 json.dumps({"latest": latest, "derived": derived,

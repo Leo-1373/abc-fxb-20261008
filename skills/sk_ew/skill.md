@@ -31,7 +31,7 @@ max_reads: 2
 
 | 槽 | 形状 | 必需 | 说明 |
 |---|---|---|---|
-| `monitor_ts[]` | 对象数组 | 是 | 每项 `{date, overdue_days, balance, repay_delay_cnt, use_dev_flag, biz_abnormal, contact_fail, natural_disaster, price_shock, guarantee_deplete}`，其余字段（信号11–41 所需）见 `references/贷后预警信号.md` §5。**每个时点都要给全同一套字段**——某字段只要有一个时点缺，引用它的信号在整条序列上都不判（跳过优于臆测） |
+| `monitor_ts[]` | 对象数组 | 是 | 每项 `{date, overdue_days, balance, repay_delay_cnt, use_dev_flag, biz_abnormal, contact_fail, natural_disaster, price_shock, guarantee_deplete}`，其余字段（信号11–41 所需）见 `references/贷后预警信号.md` §5。**每个时点都要给全同一套字段**——某字段只要有一个时点缺，引用它的信号在整条序列上都不判（跳过优于臆测）。**也接受 `monitor` 单对象**（当作 1 个时点，标 `coverage: partial`、时序能力不可用），以及 `monitor_date`/`biz_status`/`contact` 等别名，见 §5.2 |
 | `signals` | str[] | 否 | 外部已上报的信号（如客户经理回访记录），用于补充 |
 | `loan{}` | 对象 | 否 | `{amount, balance, due_date, rate}`，用于处置建议的量化 |
 | `stage` | str | 否 | 缺省贷后 |

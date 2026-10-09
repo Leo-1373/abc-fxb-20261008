@@ -311,6 +311,129 @@ def _value_of(doc_item, field):
     return (doc_item.get("fields") or {}).get(field)
 
 
+# ── 输入形状兼容层 ─────────────────────────────────────────────────
+# 为什么必须有：契约的 doc[] 每项带 `type`；而 `docs/评测方案.md` §四 给的是
+# `{name, present, expired}`——**没有 type**。只认 type 会让"交了的材料"被静默丢掉，
+# 于是每一份必交要件都被算成缺件。实测 5 份齐全的材料 → doc_miss_cnt=6、
+# redline_hit=1 → 凭空报出 R001（高）+ X007（高）。这跟契约 IF-1.4 要拦的
+# 「空输入报出一堆高风险」是同一类错误，只是入口不同。
+#
+# 规矩：两种形状都认。没有 type 就按「名称」回查清单（精确 → 别名 → 子串）；
+# **回查不到的记 unresolved，绝不当作缺件**（清单 §8 的规定）。
+NAME_ALIASES = {
+    "身份证": "ID_CARD", "借款人身份证": "ID_CARD", "身份证复印件": "ID_CARD",
+    "配偶身份证": "SPOUSE_ID", "结婚证": "MARRIAGE_CERT",
+    "婚姻状况证明": "MARRIAGE_CERT", "户口簿": "HUKOU", "户口本": "HUKOU",
+    "常住地证明": "RESIDENCE_PROOF", "共同借款人名单": "MEMBER_LIST",
+    "农户贷款业务申请表": "LOAN_APPLY", "申请表": "LOAN_APPLY",
+    "征信查询授权书": "CREDIT_AUTH", "征信授权": "CREDIT_AUTH",
+    "土地承包合同": "LAND_CERT", "土地承包经营权证": "LAND_CERT",
+    "土地经营权证": "LAND_CERT", "土地权证": "LAND_CERT",
+    "经营场所证明": "PREMISE_PROOF", "营业执照": "BIZ_LICENSE",
+    "动物防疫条件合格证": "ANIMAL_HEALTH_CERT", "种畜禽生产经营许可证": "BREED_PERMIT",
+    "水域滩涂养殖证": "WATER_PERMIT", "特殊行业许可": "SPECIAL_PERMIT",
+    "购建房合同或协议": "HOUSE_BUY_DOCS", "购销合同": "PURCHASE_CONTRACT",
+    "购销/订单合同": "PURCHASE_CONTRACT", "订单合同": "PURCHASE_CONTRACT",
+    "农机购置合同": "FARM_MACHINE_CONTRACT", "农机购置合同及补贴确认表": "FARM_MACHINE_CONTRACT",
+    "项目计划书": "PROJECT_PLAN", "收入证明": "INC_PROOF", "银行流水": "BANK_FLOW",
+    "完税证明": "TAX_PROOF", "免税证明": "TAX_PROOF", "销售台账": "SALES_LEDGER",
+    "收购凭证": "SALES_LEDGER", "资产证明": "ASSET_PROOF",
+    "村级信用评定结果": "VILLAGE_RATING", "农业保险单": "AGRI_INSURANCE",
+    "保证人身份证": "GUARANTOR_ID", "同意担保承诺书": "GUARANTOR_CONSENT",
+    "抵质押物权属证明": "COLLATERAL_CERT", "抵押物权属证明": "COLLATERAL_CERT",
+    "抵（质）押物权属证明": "COLLATERAL_CERT",
+    "处分权人同意抵质押证明": "COOWNER_CONSENT", "共有人同意证明": "COOWNER_CONSENT",
+    "评估报告": "APPRAISAL_REPORT", "价值确认书": "APPRAISAL_REPORT",
+    "农户联保协议": "JOINT_GUARANTEE_PACT", "联保协议": "JOINT_GUARANTEE_PACT",
+    "结算账户开立证明": "ACCOUNT_PROOF", "账户开立证明": "ACCOUNT_PROOF",
+    "借款合同": "LOAN_CONTRACT", "担保合同": "GUARANTEE_CONTRACT",
+    "面签影像": "SIGN_RECORD", "核验记录": "SIGN_RECORD",
+    "受托支付委托书": "ENTRUST_PAY_ORDER", "自主支付约定条款": "SELF_PAY_CLAUSE",
+    "放款条件落实单": "DISBURSE_CHECKLIST", "他项权证": "OTHER_RIGHT_CERT",
+    "交接清单": "OTHER_RIGHT_CERT", "首次贷后检查记录": "FIRST_POST_CHECK",
+    "首贷检查记录": "FIRST_POST_CHECK", "用途核查凭证": "USE_CHECK_EVIDENCE",
+    "还款提示记录": "REPAY_REMINDER", "贷后检查报告": "POST_CHECK_REPORT",
+    "担保复评记录": "GUARANTEE_REVIEW", "档案归档清单": "ARCHIVE_LIST",
+    "展期申请": "EXTEND_APPROVAL", "面谈记录": "INTERVIEW_RECORD",
+    "面谈记录及影像": "INTERVIEW_RECORD", "贷后现场检查表": "POST_CHECK_FORM",
+    "催收回执": "COLLECTION_RECEIPT",
+}
+
+
+def build_name_index(items):
+    """清单 → {名称: type}，用于按名称回查。"""
+    out = {}
+    for it in items:
+        n, t = (it.get("名称") or "").strip(), (it.get("type") or "").strip()
+        if n and t:
+            out.setdefault(n, t)
+    return out
+
+
+def _match_by_substring(nm, table):
+    """子串兜底：按候选长度降序，优先匹配更长（更具体）的名称。"""
+    for k in sorted(table, key=len, reverse=True):
+        if len(k) >= 2 and (k in nm or nm in k):
+            return table[k]
+    return None
+
+
+def resolve_type(item, name_idx):
+    """doc[] 项 → (规范 type, 匹配依据)。认不出来返回 (None, None)。"""
+    t = str(item.get("type") or "").strip()
+    if t:
+        return t, "type"
+    nm = str(item.get("name") or item.get("名称") or "").strip()
+    if not nm:
+        return None, None
+    if nm in name_idx:
+        return name_idx[nm], "清单名称"
+    if nm in NAME_ALIASES:
+        return NAME_ALIASES[nm], "常见别名"
+    t = _match_by_substring(nm, name_idx)
+    if t:
+        return t, "清单名称部分匹配"
+    t = _match_by_substring(nm, NAME_ALIASES)
+    if t:
+        return t, "别名部分匹配"
+    return None, None
+
+
+def normalize_doc(doc, items):
+    """把 doc[] 归一化成带 `type` 的形状。
+
+    返回 (已交项, 认不出的名称, 显式标为未交的名称)。
+    `present: false` 的项**不计入已交**——它本来就是"没交"的意思，
+    丢掉它才能让对应的必交要件正确地被算成缺件。
+    """
+    idx = build_name_index(items)
+    out, unresolved, absent = [], [], []
+    for d in doc or []:
+        if not isinstance(d, dict):
+            unresolved.append(str(d))
+            continue
+        nm = str(d.get("name") or d.get("名称") or d.get("type") or "?").strip()
+        if d.get("present") is False:
+            absent.append(nm)
+            continue
+        t, how = resolve_type(d, idx)
+        if not t:
+            unresolved.append(nm)
+            continue
+        nd = dict(d)
+        nd["type"] = t
+        if how != "type":
+            # 这一项是靠「名称」认出来的。在评测方案形状里 `name` 是**材料名**
+            # （"借款人身份证"），而一致性比对里的 `name` 是**持有人姓名**——
+            # 两个语义撞在同一个键上。留着它会让 §5.2 的姓名比对把"材料名"
+            # 当成"姓名"去和申请人比 → 凭空报出材料矛盾（实测 3 处）。
+            # 所以改挂到 `名称` 下，把 `name` 腾出来。
+            nd["名称"] = d.get("name") or d.get("名称")
+            nd.pop("name", None)
+        out.append(nd)
+    return out, unresolved, absent
+
+
 def check(doc, applicant, stage, items, situations, as_of, known_types=None):
     """核心比对。返回 (metrics, facts, notes)。"""
     applicant = applicant or {}
@@ -322,7 +445,16 @@ def check(doc, applicant, stage, items, situations, as_of, known_types=None):
     if not doc:
         return None, None, ["doc 缺失或为空 → 无法比对，coverage: partial"]
 
-    present = _by_type(doc)
+    # 形状归一（见 normalize_doc）：没有 type 的项按名称回查清单。
+    # 一项都认不出来时**不做比对**——宁可标 partial，也不把"读不懂的材料表"
+    # 当成"一份都没交"，那会凭空报出 R001（高）+ X007（高）。
+    norm_doc, unresolved_names, absent = normalize_doc(doc, items)
+    if not norm_doc and not absent:
+        return None, None, [
+            "doc[] 里 %d 项都没能识别出材料类型（形状不认识）→ 不做比对，"
+            "coverage: partial" % len(doc)]
+
+    present = _by_type(norm_doc)
     required, pending = required_items(items, stage, situations)
     # 只提醒**确实没交**的待定项——已交的材料不管情形怎么判都不缺件，报出来是噪音
     unresolved = sorted({c for p in pending if p["type"] not in present
@@ -341,19 +473,23 @@ def check(doc, applicant, stage, items, situations, as_of, known_types=None):
 
     # ② 过期。expire_date 为空 = 没有有效期，**不是过期**（清单 §5.1）。
     #    临期（≤30 天）与已过期分开，临期只提示、不算过期。
+    #    日期优先；没给日期时用 `expired` 旗标兜底（评测方案形状里有这个字段）。
     expired, expired_key, expired_soon = [], [], []
     as_of_d = _date(as_of)
     soon_d = as_of_d + datetime.timedelta(days=EXPIRED_SOON_DAYS) if as_of_d else None
-    for d in doc:
+    for d in norm_doc:
         exp = _date(_value_of(d, "expire_date"))
-        if exp is None or as_of_d is None:
-            continue
-        if exp < as_of_d:
+        if exp is not None and as_of_d is not None:
+            if exp < as_of_d:
+                expired.append(d.get("type"))
+                if d.get("type") in KEY_CERT_TYPES:
+                    expired_key.append(d.get("type"))
+            elif soon_d and exp <= soon_d:
+                expired_soon.append(d.get("type"))
+        elif d.get("expired") is True:
             expired.append(d.get("type"))
             if d.get("type") in KEY_CERT_TYPES:
                 expired_key.append(d.get("type"))
-        elif soon_d and exp <= soon_d:
-            expired_soon.append(d.get("type"))
 
     # ③ 跨材料矛盾：同一事实对不上，逐处计 1；同时记下**比对项**以便分类计数。
     #    任一侧缺值一律跳过——缺值是"没数据"，不是"对不上"。
@@ -377,9 +513,10 @@ def check(doc, applicant, stage, items, situations, as_of, known_types=None):
 
     # ③b 日期倒挂（清单 §5.2「日期」行）：合同签订日晚于放款日、或早于申请日。
     #     两个日期任一缺值 → 不判（缺值是"没数据"，不是"矛盾"）。
-    disburse_d = _date(applicant.get("disburse_date"))
-    apply_d = _date(applicant.get("apply_date"))
-    for d in doc:
+    disburse_d = _date(applicant.get("disburse_date") or applicant.get("借款日期")
+                       or applicant.get("loan_date"))
+    apply_d = _date(applicant.get("apply_date") or applicant.get("申请日期"))
+    for d in norm_doc:
         sd = _date(_value_of(d, "sign_date"))
         if sd is None:
             continue
@@ -390,16 +527,33 @@ def check(doc, applicant, stage, items, situations, as_of, known_types=None):
             inconsis.append(("date", "%s.sign_date=%s<申请日%s"
                              % (d.get("type"), sd, apply_d)))
 
-    inconsis_by = {f: len([1 for it in inconsis if it[0] == f]) for f in INCONSIST_CODES}
+    # 材料**一项可比对字段都没带**（如评测方案形状 {name, present, expired}）→
+    # 矛盾项是「无法判定」，不是「没有矛盾」。填 0 会让 R004/R008 静默不命中、
+    # 却看起来像"已经查过"，填 None 才是实话（契约 IF-1.4）。
+    comparables_seen = any(_value_of(d, f) not in (None, "")
+                           for d in norm_doc
+                           for f in ("name", "id_no", "area", "amount", "sign_date"))
+    inconsis_by = ({f: len([1 for it in inconsis if it[0] == f])
+                    for f in INCONSIST_CODES} if comparables_seen
+                   else {f: None for f in INCONSIST_CODES})
+    inconsis_cnt = len(inconsis) if comparables_seen else None
+    if not comparables_seen:
+        notes.append("材料未带可比对字段（name/id_no/area/amount/sign_date）"
+                     "→ 矛盾项无法判定，相关规则跳过")
 
-    # ④ 身份证核验：在有效期内 且 与申请人一致。缺件 → None（不可判为 0）
+    # ④ 身份证核验：在有效期内 且 与申请人一致。
+    #    **读不到姓名是"没数据"，不是"对不上"**——一律判 0 会凭空报 R005（高）。
     id_valid = None
     for d in present.get("ID_CARD", []):
         exp = _date(_value_of(d, "expire_date"))
-        name_ok = (_norm(_value_of(d, "name")) == _norm(applicant.get("name"))
-                   or _norm(d.get("holder")) == _norm(applicant.get("name")))
+        got = _norm(_value_of(d, "name")) or _norm(d.get("holder"))
+        want = _norm(applicant.get("name"))
         date_ok = (exp is None) or (as_of_d is None) or (exp >= as_of_d)
-        id_valid = 1 if (name_ok and date_ok) else 0
+        if not date_ok:
+            id_valid = 0                       # 过期 → 明确不通过
+        elif got is not None and want is not None:
+            id_valid = 0 if (id_valid == 0 or got != want) else 1
+        # 姓名读不到 → 保持 None：无法核验 ≠ 核验不通过
 
     # ⑤ 土地权属：面积偏差是否在 ±5% 内。任一侧缺值 → None
     #    偏差比例同时回传，供「接近容差」的苗头规则使用。
@@ -421,21 +575,28 @@ def check(doc, applicant, stage, items, situations, as_of, known_types=None):
                 ok = False
             elif f.get("sign_complete") is True:
                 ok = True
-            else:
-                need = _num(f.get("seal_required")) or 1.0
+            elif (_num(f.get("seal_count")) is not None
+                  or _num(f.get("seal_required")) is not None):
+                need = _num(f.get("seal_required"))
                 got = _num(f.get("seal_count"))
-                ok = not (got is not None and got < need)
+                ok = not (need is not None and got is not None and got < need)
+            else:
+                # 完全没带签章信息（如 {name, present, expired} 形状）→ 无法判定。
+                # **不要默认"齐全"**：那会把"没查"说成"查过且没问题"。
+                continue
             if sign_complete is None:
                 sign_complete = 1
             if not ok:
                 sign_complete, sign_missing_cnt = 0, sign_missing_cnt + 1
 
-    # ⑦ 清单未覆盖的材料类型：**不当作缺件**（可能是清单还没收录的新材料），
-    #    只报出来供迭代（清单 §8）。缺 known_types 时不判，避免把附表误判成未知。
-    unknown_types = None
-    if known_types:
-        unknown_types = sorted({d.get("type") for d in doc
-                                if d.get("type") and d.get("type") not in known_types})
+    # ⑦ 清单未覆盖的材料：**不当作缺件**（可能是清单还没收录的新材料），
+    #    只报出来供迭代（清单 §8）。两个来源：
+    #      ① 名称回查不到清单的（unresolved_names）
+    #      ② type 码不在清单里的 —— 需要 known_types，缺了就不判，
+    #         避免把 §1.1/§2.1/§3.1 附表里的 type 误判成"未知"。
+    unknown_types = sorted({d["type"] for d in norm_doc
+                            if known_types and d["type"] not in known_types})
+    doc_unknown_type_cnt = len(unresolved_names) + len(unknown_types)
 
     # ⑧ 首贷检查超期（2020贷后办法第十五条：发放后 3 个月内）。
     #    只拿到检查日才判超期；记录整份没交 → 交给缺件规则 R017，不重复报。
@@ -497,14 +658,14 @@ def check(doc, applicant, stage, items, situations, as_of, known_types=None):
         "doc_expired_cnt": len(expired),
         "doc_expired_key_cnt": len(expired_key),
         "doc_expired_soon_cnt": len(expired_soon),
-        "doc_inconsist_cnt": len(inconsis),
+        "doc_inconsist_cnt": inconsis_cnt,
         "doc_inconsist_name_cnt": inconsis_by["name"],
         "doc_inconsist_idno_cnt": inconsis_by["id_no"],
         "doc_inconsist_area_cnt": inconsis_by["area"],
         "doc_inconsist_amount_cnt": inconsis_by["amount"],
         "doc_inconsist_date_cnt": inconsis_by["date"],
         "doc_sign_missing_cnt": sign_missing_cnt,
-        "doc_unknown_type_cnt": None if unknown_types is None else len(unknown_types),
+        "doc_unknown_type_cnt": doc_unknown_type_cnt,
         "doc_land_area_dev": land_area_dev,
         "doc_interview_missing": interview_missing,
         "doc_first_check_overdue_days": first_check_overdue_days,
@@ -525,6 +686,18 @@ def check(doc, applicant, stage, items, situations, as_of, known_types=None):
     }
     if unknown_types:
         facts["unknown_types"] = ",".join(unknown_types)
+    if unresolved_names:
+        # 认不出的材料名称**不是缺件**（清单 §8）。列出来是为了让它可见——
+        # 静默丢掉正是"交了的材料被判成缺件"那个 bug 的根。
+        facts["unmapped_materials"] = ",".join(unresolved_names[:10]) + \
+            ("…" if len(unresolved_names) > 10 else "")
+        notes.append("%d 项材料名称没能对上清单 → 未计入缺件，也不当作已交：%s"
+                     "（如确认是新材料，应补进清单）"
+                     % (len(unresolved_names),
+                        ",".join(unresolved_names[:6])
+                        + ("…" if len(unresolved_names) > 6 else "")))
+    if absent:
+        facts["marked_absent"] = ",".join(absent[:10])
     if unresolved:
         shown = ",".join(unresolved[:10]) + ("…" if len(unresolved) > 10 else "")
         notes.append("%d 个条件情形未能判定，相关材料未计入缺件：%s"
@@ -604,7 +777,8 @@ def evaluate(rules, metrics, facts, stage="贷前"):
 
 def facts_line(facts):
     order = ["miss_types", "miss_cnt", "redline_hit", "expired_types",
-             "expired_key_types", "unknown_types", "inconsist", "stage"]
+             "expired_key_types", "unknown_types", "unmapped_materials",
+             "marked_absent", "inconsist", "stage"]
     return "facts@doc|" + "|".join("%s=%s" % (k, facts[k])
                                    for k in order if facts.get(k) not in (None, ""))
 
