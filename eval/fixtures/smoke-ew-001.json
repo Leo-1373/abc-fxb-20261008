@@ -1,0 +1,31 @@
+{
+  "_comment": "smoke-ew-001 · sk_ew 脚本冒烟用例。四个监测时点，刻意埋了 3 类时序：① 逾期从正常一路走到次级(52天) → 验跨档强制升级；② 用途偏离连续 3 个时点 → 验连续升级；③ 失联只在第 2 个时点出现、之后连续 2 期消失 → 验拟解除。价格冲击连续 3 期且初判只到「中」→ 验升级把等级抬到「高」。",
+  "loan": {
+    "amount": 100000,
+    "balance": 35000,
+    "due_date": "2027-03-31",
+    "rate": 0.0435
+  },
+
+  "monitor_ts": [
+    {"date": "2026-03-31", "overdue_days": 0,  "balance": 80000,
+     "repay_delay_cnt": 0, "use_dev_flag": 0, "biz_abnormal": 0,
+     "contact_fail": 0, "natural_disaster": 0, "price_shock": 0,
+     "guarantee_deplete": 0},
+
+    {"date": "2026-06-30", "overdue_days": 12, "balance": 60000,
+     "repay_delay_cnt": 1, "use_dev_flag": 1, "biz_abnormal": 0,
+     "contact_fail": 1, "natural_disaster": 0, "price_shock": 1,
+     "guarantee_deplete": 0},
+
+    {"date": "2026-09-30", "overdue_days": 45, "balance": 40000,
+     "repay_delay_cnt": 1, "use_dev_flag": 1, "biz_abnormal": 0,
+     "contact_fail": 0, "natural_disaster": 0, "price_shock": 1,
+     "guarantee_deplete": 0},
+
+    {"date": "2026-10-09", "overdue_days": 52, "balance": 35000,
+     "repay_delay_cnt": 2, "use_dev_flag": 1, "biz_abnormal": 0,
+     "contact_fail": 0, "natural_disaster": 0, "price_shock": 1,
+     "guarantee_deplete": 0}
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "_comment": "smoke-doc-001 · sk_doc 脚本冒烟用例。刻意埋了 4 类问题：缺件 2 项（其中 2 项是红线）、配偶身份证过期、土地面积与申报不符、担保承诺书未签字。as_of 显式给定，保证回归可复现。",
+  "stage": "贷前",
+  "as_of": "2026-10-09",
+  "situations": ["种植", "已婚", "保证担保"],
+
+  "applicant": {
+    "name": "张桂兰",
+    "id_no": "310115199001011234",
+    "purpose": "购买化肥农药",
+    "business": "水稻种植",
+    "guarantee_type": "保证",
+    "marital": "已婚",
+    "declared_area": 15,
+    "declared_amount": 100000,
+    "declared_inc": 8000
+  },
+
+  "doc": [
+    {"type": "ID_CARD", "holder": "张桂兰", "no": "310115199001011234",
+     "issue_date": "2020-01-01", "expire_date": "2030-01-01",
+     "fields": {"name": "张桂兰", "id_no": "310115199001011234"}},
+
+    {"type": "SPOUSE_ID", "holder": "李建国", "no": "310115198812125678",
+     "issue_date": "2016-05-01", "expire_date": "2026-05-01"},
+
+    {"type": "MARRIAGE_CERT", "holder": "张桂兰", "issue_date": "2012-03-08",
+     "fields": {"name": "张桂兰"}},
+
+    {"type": "HUKOU", "holder": "李建国", "issue_date": "2015-06-01"},
+
+    {"type": "LOAN_APPLY", "fields": {"name": "张桂兰", "sign_complete": true,
+                                      "seal_count": 1, "seal_required": 1}},
+
+    {"type": "LAND_CERT", "fields": {"area": 12, "expire_date": "2035-12-31"}},
+
+    {"type": "INC_PROOF", "fields": {"name": "张桂兰", "amount": 8000}},
+
+    {"type": "GUARANTOR_ID", "holder": "王大力", "no": "310115197505054321",
+     "expire_date": "2028-03-01"},
+
+    {"type": "GUARANTOR_CONSENT", "fields": {"sign_complete": false}}
+  ]
+}
