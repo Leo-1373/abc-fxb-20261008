@@ -50,7 +50,7 @@ max_reads: 2
 4. 土地权证面积 vs 申报面积 → `land_right_match`；签章齐全性 → `sign_complete`
 5. 按内联规则判定等级，输出 findings
 
-> 本 skill 目前无脚本。若材料量大（>20 项），建议真超奇（P3）补 `scripts/check.py` 做字段级比对，
+> 本 skill 目前无脚本。若材料量大（>20 项），建议真超奇补 `scripts/check.py` 做字段级比对，
 > **比对是确定性的，不该让模型逐项看**。
 
 ## 输出

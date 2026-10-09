@@ -124,7 +124,7 @@ def classify(rh, ivh, rl, ivl):
                          % (rh["id"], rh["level"], rh["cond"], rl["id"], rl["level"], rl["cond"]))
     if set(ivl) < set(ivh) and all(subset_interval(ivh[k], ivl[k]) for k in ivl):
         return "warn", ("D2* %s(%s) 是 %s(%s) 的严格强化（多带条件维度 %s）→ 组合升级，"
-                        "请 P2 确认是有意设计并记入依据库"
+                        "请金宇桐确认是有意设计并记入依据库"
                         % (rh["id"], rh["level"], rl["id"], rl["level"],
                            ",".join(sorted(set(ivh) - set(ivl)))))
     return "warn", ("D2? %s(%s, %s) 与 %s(%s, %s) 区间部分重叠且等级不同，"

@@ -230,7 +230,7 @@ def aggregate(credit, debt, declared_inc=None):
             m["dti"] = round(monthly_pay / declared, 4)
 
     # total_debt：契约 IF-4 的 upstream 声明为 `total_debt <- sk_cred`，
-    # 而 sk_cred/skill.md 的边界又写"不算 total_debt"。两处口径不一致（待 P2 裁决）。
+    # 而 sk_cred/skill.md 的边界又写"不算 total_debt"。两处口径不一致（待金宇桐裁决）。
     # 本实现取**超集**：在贷余额、对外担保、以及二者之和都回传，
     # 这样无论裁决为"sk_cred 算"还是"sk_rules 算"，下游都不缺数据。
     # **只提供数值，不判"总负债超年收入"**——判定始终归 sk_rules 的 X003。

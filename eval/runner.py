@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""评测跑分工具（P6 专用，规范见 docs/评测方案.md）。
+"""评测跑分工具（钱浩军专用，规范见 docs/评测方案.md）。
 
 三种用法：
 
@@ -9,7 +9,7 @@
     --score <dir>       用跑好的系统输出打分，出报告
 
 **为什么不直接调系统？**
-    平台怎么调用子 skill 还没定（P1 平台侦查未完成）。所以这里隔了一层文件：
+    平台怎么调用子 skill 还没定（李昊霖平台侦查未完成）。所以这里隔了一层文件：
     你先把系统对每道题的回答存成文件（文件名 = 题号），工具读文件来打分。
     平台一定，只要写个小脚本把回答落成文件，本工具一个字都不用改。
 
@@ -19,7 +19,7 @@
     risk_level       总体等级对不对
 
 措辞不一样怎么办？靠 eval/synonyms.json 同义词表认亲。
-认不出来的会单独列成"待人工确认"清单，最后由 P6 拍板。
+认不出来的会单独列成"待人工确认"清单，最后由钱浩军拍板。
 
 用法：
     PYTHONIOENCODING=utf-8 python3 eval/runner.py --list
@@ -520,7 +520,7 @@ def cmd_index(out_path, include_heldout=True):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="评测跑分工具（P6）")
+    ap = argparse.ArgumentParser(description="评测跑分工具（钱浩军）")
     ap.add_argument("--list", action="store_true", help="看题库概况")
     ap.add_argument("--check", action="store_true", help="只校验题目写法")
     ap.add_argument("--score", metavar="DIR", help="用系统输出目录打分")

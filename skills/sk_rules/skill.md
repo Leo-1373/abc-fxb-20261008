@@ -64,7 +64,7 @@ max_reads: 2
 5. **等级合成**：按 `references/rules.closure.md` 的 `level_synthesis` 段
 6. 输出 `risk{}`
 
-> 金宇桐（P2）应补 `scripts/synthesize.py`：把步骤 1/2/5 做成确定性脚本。
+> 金宇桐应补 `scripts/synthesize.py`：把步骤 1/2/5 做成确定性脚本。
 > **等级合成是纯查表逻辑，不该让模型算**——否则同一输入两次运行可能给不同等级，
 > 破坏幂等性（契约测试 C-幂等）。
 

@@ -9,7 +9,7 @@
   monotonic   风险因子上升 → 等级不下降（性质断言，不需要标准答案）
   degrade     空输入/缺字段不崩，且标注 coverage: partial（而非静默跳过）
 
-正式评测集（含 held-out 与对抗案例）由 P6 独立造题，见 docs/交付说明.md §4。
+正式评测集（含 held-out 与对抗案例）由钱浩军独立造题，见 docs/交付说明.md §4。
 
 用法：PYTHONIOENCODING=utf-8 python eval/contract_tests.py
 """
