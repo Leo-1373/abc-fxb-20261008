@@ -33,14 +33,55 @@ rules: |
   # title 是风险点名称（名词短语，≤12字），advice 是处置建议（动词短语）。
 
   # ── dim=doc · owner=sk_doc ────────────────────────────────────
-  R001|doc|doc_miss_cnt>=3|高|材料大量缺失|暂缓受理并补齐材料|资料核查要点1|sk_doc
-  R002|doc|doc_miss_cnt>=1 && doc_miss_cnt<=2|中|材料部分缺失|限期补齐缺件|资料核查要点1|sk_doc
-  R003|doc|doc_expired_cnt>=1|中|证照过期|更换有效证照|资料核查要点2|sk_doc
-  R004|doc|doc_inconsist_cnt>=1|高|材料相互矛盾|核实材料矛盾项|资料核查要点3|sk_doc
-  R005|doc|id_valid==0|高|身份证核验不通过|重新核验身份|资料核查要点4|sk_doc
-  R006|doc|land_right_match==0|高|土地权属与申报不符|核实土地权属|资料核查要点5|sk_doc
-  R007|doc|sign_complete==0|中|签章不完整|补签章后受理|资料核查要点6|sk_doc
-  R008|doc|doc_inconsist_cnt>=3|高|材料系统性矛盾|全面复核申请材料|资料核查要点3|sk_doc
+  # basis 一律引 《必备材料清单》 §7 的靶子编号（旧版引的「资料核查要点N」
+  # 指向一份从未写出的文件，是悬空引用；2026-10-09 补齐参考资料时一并订正）。
+  R001|doc|doc_miss_cnt>=3|高|材料大量缺失|暂缓受理并补齐材料|必备材料清单7-1|sk_doc
+  R002|doc|doc_miss_cnt>=1 && doc_miss_cnt<=2|中|材料部分缺失|限期补齐缺件|必备材料清单7-2|sk_doc
+  R003|doc|doc_expired_cnt>=1|中|证照过期|更换有效证照|必备材料清单7-14|sk_doc
+  R004|doc|doc_inconsist_cnt>=1|高|材料相互矛盾|核实材料矛盾项|必备材料清单7-18|sk_doc
+  R005|doc|id_valid==0|高|身份证核验不通过|重新核验身份|必备材料清单7-25|sk_doc
+  R006|doc|land_right_match==0|高|土地权属与申报不符|核实土地权属|必备材料清单7-26|sk_doc
+  R007|doc|sign_complete==0|中|签章不完整|补签章后受理|必备材料清单7-28|sk_doc
+  R008|doc|doc_inconsist_cnt>=3|高|材料系统性矛盾|全面复核申请材料|必备材料清单7-19|sk_doc
+
+  # ── dim=doc 扩容 · owner=sk_doc（真超奇补，8 → 36 条）────────────
+  # 设计要点：**同一变量只给一个等级**（R001 已把 doc_miss_cnt>=3 判高，
+  # 就不再在同一个变量上再开一条不同等级的规则——那会被
+  # build/check_rule_conflicts.py 的 D2 判成"同一现象两个等级"）。
+  # 因此扩容主要靠**按类别/比对项拆变量**，而不是把阈值切得更碎。
+  # 缺件类
+  R009|doc|doc_miss_redline_cnt>=3|高|多份准入要件缺失|暂缓受理并补齐材料|必备材料清单7-4|sk_doc
+  R010|doc|doc_miss_identity_cnt>=1|中|身份类要件缺失|限期补齐身份材料|必备材料清单7-5|sk_doc
+  R011|doc|doc_miss_income_cnt>=1|中|收入要件缺失|补充收入证明材料|必备材料清单7-6|sk_doc
+  R012|doc|doc_miss_use_cnt>=1|中|用途材料缺失|补充用途证明材料|必备材料清单7-7|sk_doc
+  R013|doc|doc_miss_guarantee_cnt>=2|中|担保要件缺失|限期补齐担保材料|必备材料清单7-8|sk_doc
+  R014|doc|doc_miss_guarantee_cnt==1|低|担保材料不全|提示补齐担保材料|必备材料清单7-9|sk_doc
+  R015|doc|doc_miss_biz_cnt>=2|中|经营要件缺失|补充经营类证明材料|必备材料清单7-10|sk_doc
+  R016|doc|doc_miss_contract_cnt>=1|高|合同支付要件缺失|补齐合同支付要件|必备材料清单7-11|sk_doc
+  R017|doc|doc_miss_postcheck_cnt>=1|中|贷后检查材料缺失|限期补齐检查记录|必备材料清单7-12|sk_doc
+  R018|doc|doc_miss_archive_cnt>=1|低|归档材料缺失|及时归档贷后材料|必备材料清单7-13|sk_doc
+  R019|doc|doc_miss_cnt>=6|高|材料严重缺失|暂缓受理并全面复核|必备材料清单7-3|sk_doc
+  # 时效类
+  R020|doc|doc_expired_key_cnt>=2|高|关键证照多份过期|更换有效证照后受理|必备材料清单7-15|sk_doc
+  R021|doc|doc_expired_key_cnt==1|中|关键证照过期|更换有效证照|必备材料清单7-16|sk_doc
+  R022|doc|doc_expired_soon_cnt>=1|低|证照临期提示|提示及时换发证照|必备材料清单7-17|sk_doc
+  # 一致性类（按比对项拆开：总项数给不了处置动作，拆开才知道该找谁核）
+  R023|doc|doc_inconsist_name_cnt>=1|高|姓名不一致|核实并更正姓名|必备材料清单7-20|sk_doc
+  R024|doc|doc_inconsist_idno_cnt>=1|高|证件号不一致|核实并更正证件号|必备材料清单7-21|sk_doc
+  R025|doc|doc_inconsist_amount_cnt>=1|高|合同金额不一致|核实合同金额一致性|必备材料清单7-22|sk_doc
+  R026|doc|doc_inconsist_area_cnt>=1|中|权证面积不一致|核实申报面积与权证|必备材料清单7-23|sk_doc
+  R027|doc|doc_inconsist_date_cnt>=1|中|材料日期矛盾|核实材料日期逻辑|必备材料清单7-24|sk_doc
+  # 形式类
+  R028|doc|doc_sign_missing_cnt>=2|中|多份材料缺签章|补签并完善签章|必备材料清单7-29|sk_doc
+  R029|doc|doc_unknown_type_cnt>=1|低|存在清单外材料|人工确认材料类型|必备材料清单7-30|sk_doc
+  R030|doc|doc_land_area_dev>0.03 && doc_land_area_dev<=0.05|低|面积接近容差|复核权证面积偏差|必备材料清单7-27|sk_doc
+  # 流程合规类（行内制度有明文期限，见 §5.1）
+  R031|doc|doc_interview_missing==1|中|面谈记录未留痕|补做面谈并留痕|必备材料清单7-31|sk_doc
+  R032|doc|doc_first_check_overdue_days>0 && doc_first_check_overdue_days<=30|中|首贷检查超期|限期补做首次检查|必备材料清单7-32|sk_doc
+  R033|doc|doc_first_check_overdue_days>30|高|首贷检查严重超期|立即补做首次检查|必备材料清单7-33|sk_doc
+  R034|doc|doc_onsite_check_shortfall==1|中|现场检查未达频次|限期补做现场检查|必备材料清单7-34|sk_doc
+  R035|doc|doc_onsite_check_shortfall>=2|高|现场检查严重不足|立即补做并追究责任|必备材料清单7-35|sk_doc
+  R036|doc|doc_entrust_amt_short==1|高|受托支付金额不足|补足受托支付凭证|必备材料清单7-36|sk_doc
 
   # ── dim=cash · owner=sk_cash ──────────────────────────────────
   R101|cash|inc_cv>0.5 && gap_cnt>=3|高|收入波动叠加断档|核实收入波动原因|流水分析要点3|sk_cash
@@ -144,6 +185,61 @@ rules: |
   E009|ew|natural_disaster==1|高|遭受自然灾害|核实损失并评估展期|贷后预警信号6|sk_ew
   E010|ew|price_shock==1|中|主营产品价格冲击|评估收入影响|贷后预警信号7|sk_ew
   E011|ew|guarantee_deplete==1|高|担保弱化|追加担保或压降|贷后预警信号9|sk_ew
+
+  # ── dim=ew 扩容 · owner=sk_ew（真超奇补，11 → 50 条）─────────────
+  # 靶子是 贷后预警信号.md §6 的「覆盖缺口」：信号10–41 此前一条规则都没有。
+  # 高等级信号（提前收贷/终止用信级）与中等级信号**分档定级**，
+  # 避免与伞形信号9（E011）重复——信号9 只在无法归因到子情形时兜底。
+  # basis 写「贷后预警信号N」是**有功能的**：ew.py 靠它把 `signal_streak`
+  # （该信号已连续出现的时点数）注入这条规则的求值作用域（见 ew.py evaluate）。
+  # 信号10 · 逾期跨档（由 ew.py trend 的档位轨迹算出，不是单时点快照）
+  E012|ew|overdue_band_crossed==1|高|逾期跨档恶化|上门催收并评估处置|贷后预警信号10|sk_ew
+  # 信号11–14 · 资金用途类（行内明文见 2020贷后办法第三十一条）
+  E013|ew|repay_by_new_loan==1|高|借新还旧迹象|核实还款资金来源|贷后预警信号11|sk_ew
+  E014|ew|fund_backflow_flag==1|高|资金回流关联方|要求说明并追回资金|贷后预警信号12|sk_ew
+  E015|ew|split_disburse_flag==1|高|化整为零支付|整改支付方式|贷后预警信号13|sk_ew
+  E016|ew|forbidden_use_flag==1|高|资金流入禁止领域|宣布提前到期|贷后预警信号14|sk_ew
+  # 信号15–19 · 经营主体类
+  E017|ew|litigation_flag==1|高|涉诉被执行|启动资产保全|贷后预警信号15|sk_ew
+  E018|ew|penalty_flag==1|中|受到行政处罚|关注经营影响|贷后预警信号16|sk_ew
+  E019|ew|biz_idle_flag==1|中|经营场所闲置停产|现场核实经营状态|贷后预警信号17|sk_ew
+  E020|ew|family_change_flag==1|中|家庭主要成员变故|核实还款能力变化|贷后预警信号18|sk_ew
+  E021|ew|staff_drop_ratio>0.5|中|用工规模大幅收缩|核实经营规模变化|贷后预警信号19|sk_ew
+  # 信号20–23 · 担保类（信号9 的四个子情形：分别定级、分别给处置动作）
+  E022|ew|collateral_value_drop>0.2|高|押品贬值|追加担保或压降额度|贷后预警信号20|sk_ew
+  E023|ew|guarantor_ability_down==1|高|保证人代偿力下降|更换或追加保证人|贷后预警信号21|sk_ew
+  E024|ew|mortgage_reg_expired==1|中|抵押登记失效|限期补办登记|贷后预警信号22|sk_ew
+  E025|ew|joint_guarantee_risk==1|高|联保体成员出险|评估连带代偿影响|贷后预警信号23|sk_ew
+  # 信号24–27 · 外部环境类
+  E026|ew|epidemic_flag==1|高|重大动物疫情|核实损失并评估展期|贷后预警信号24|sk_ew
+  E027|ew|policy_shock_flag==1|中|产业政策调整|评估经营可持续性|贷后预警信号25|sk_ew
+  E028|ew|agri_insurance_lapse==1|中|农业保险失效|提示补足保险|贷后预警信号26|sk_ew
+  E029|ew|upstream_down_flag==1|中|上下游经营恶化|核实供应链稳定性|贷后预警信号27|sk_ew
+  # 信号28–33 · 联系配合与信用行为类
+  E030|ew|refuse_check_flag==1|中|拒绝配合贷后检查|上门检查并告知后果|贷后预警信号28|sk_ew
+  E031|ew|account_frozen_flag==1|高|结算账户被冻结|核实原因并评估保全|贷后预警信号29|sk_ew
+  E032|ew|other_bank_overdue==1|高|他行新增逾期|重估交叉违约风险|贷后预警信号30|sk_ew
+  E033|ew|new_multi_lend_post>=2|高|贷后新增多头借贷|核实新增融资用途|贷后预警信号31|sk_ew
+  E034|ew|query_surge_post==1|中|贷后征信查询骤增|核实集中申贷原因|贷后预警信号32|sk_ew
+  E035|ew|check_overdue_days>0|中|首次贷后检查超期|限期补做首次检查|贷后预警信号33|sk_ew
+  # 信号34–41 · 严重风险问题与流程合规
+  E036|ew|impersonation_flag==1|高|冒顶名贷款|提前收回并终止用信|贷后预警信号34|sk_ew
+  E037|ew|multi_borrow_one_use==1|高|多人承贷一人使用|提前收回并终止用信|贷后预警信号35|sk_ew
+  E038|ew|company_use_personal==1|高|个人承贷公司使用|提前收回并终止用信|贷后预警信号36|sk_ew
+  E039|ew|aml_level_up==1|高|洗钱风险等级升高|加强尽调或提前收回|贷后预警信号37|sk_ew
+  E040|ew|collateral_disposed_flag==1|高|押品被擅自处置|要求恢复担保状态|贷后预警信号38|sk_ew
+  E041|ew|illegal_fundraise_flag==1|高|民间借贷非法集资|停止发放并提前收回|贷后预警信号39|sk_ew
+  E042|ew|convicted_flag==1|高|家庭成员被判刑|提前收回并终止用信|贷后预警信号40|sk_ew
+  E043|ew|check_freq_shortfall>=1|中|贷后检查频次不足|限期补做现场检查|贷后预警信号41|sk_ew
+  # 时序类（信号表 §3.1/§3.2）——**规则唯一能表达"信号在恶化"的方式**。
+  # E044–E046 用 ew.py trend 的聚合量；E047–E050 用按信号注入的 signal_streak。
+  E044|ew|ew_force_cnt>=1|高|信号进入强制处置|启动资产保全|贷后预警信号表3.1|sk_ew
+  E045|ew|ew_upgrade_cnt>=2|中|多信号同步恶化|增频检查并跟踪|贷后预警信号表3.1|sk_ew
+  E046|ew|ew_release_cnt>=1|低|信号拟解除待确认|核实后解除预警|贷后预警信号表3.2|sk_ew
+  E047|ew|use_dev_flag==1 && signal_streak>=3|高|用途偏离持续恶化|提前收回并终止用信|贷后预警信号3|sk_ew
+  E048|ew|overdue_days>30 && signal_streak>=3|高|逾期持续恶化|依法追偿|贷后预警信号1|sk_ew
+  E049|ew|biz_abnormal==1 && signal_streak>=2|高|经营异常持续存在|压降额度并追加担保|贷后预警信号5|sk_ew
+  E050|ew|contact_fail==1 && signal_streak>=4|高|客户长期失联|上门走访并评估处置|贷后预警信号8|sk_ew
 
 # 等级合成规则（仅 sk_rules 使用，契约 D2）
 # 输入：全部 finding 的 level 集合  →  输出：整体 risk.level

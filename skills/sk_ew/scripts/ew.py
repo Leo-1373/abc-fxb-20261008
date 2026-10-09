@@ -249,15 +249,25 @@ def trend(monitor_ts, signals):
                        "last_date": str(tss[-1].get("date", "")),
                        "trajectory": ">".join(_band_label(b[0]) for b in bands)})
 
+    # 时序升级后的等级只涨不跌，便于调用方直接取用
+    for s in states:
+        s["level_升级"] = _elevate(s["level"]) if s["state"] == "升级" else s["level"]
+
+    active = [s for s in states if s["state"] != "拟解除"]
     derived = {
         "overdue_band": bands[-1][1],
         "overdue_band_crossed": crossed,
         "overdue_trajectory": ">".join(_band_label(b[0]) for b in bands),
         "n_ts": len(tss),
+        # 时序聚合量（贷后预警信号.md §3.1/§3.2 的可判定化）。
+        # **只放数值/布尔**——`eval_cond` 的作用域会滤掉字符串，
+        # 规则引用了 `overdue_band`/`overdue_trajectory` 只会被静默跳过。
+        "ew_max_streak": max([s["streak"] for s in active] or [0]),
+        "ew_upgrade_cnt": len([s for s in active if s["state"] == "升级"]),
+        "ew_force_cnt": len([s for s in active
+                             if s["state"] == "升级" and s["streak"] >= STREAK_FORCE]),
+        "ew_release_cnt": len([s for s in states if s["state"] == "拟解除"]),
     }
-    # 时序升级后的等级只涨不跌，便于调用方直接取用
-    for s in states:
-        s["level_升级"] = _elevate(s["level"]) if s["state"] == "升级" else s["level"]
     return envs[-1], derived, states, notes, skipped
 
 
@@ -327,6 +337,11 @@ def evaluate(rules, latest, derived, states, stage="贷后"):
     时序升级是**脚本的职责**，不是规则的：现有规则全是单点快照，
     没有任何一条能表达「信号在恶化」。规则判"现在什么情况"，
     脚本判"这情况在往哪走"，两者合并才是贷后动态预警。
+
+    但规则要能**参与**时序判定，就必须拿得到连续时点数——故按规则自己的
+    信号注入 `signal_streak`（见 `signal_no_of`，靠 `basis` 列的
+    「贷后预警信号N」映射）。这条短码把"连续 N 个时点"从每个信号各自的
+    派生量变成通用输入，省下三十多个信号各写一套 streak 的重复（信号表 §5）。
     """
     env = dict(latest or {})
     env.update(derived or {})
@@ -334,21 +349,27 @@ def evaluate(rules, latest, derived, states, stage="贷后"):
 
     l1, l2, skipped = [], [], 0
     for r in rules:
+        st = by_no.get(signal_no_of(r))
+        # 信号从没命中过（或该规则不由信号驱动）→ 不注入，规则引用它即变量缺失
+        # → 跳过。**跳过优于臆测**：拿不到 streak 时把"连续"当成立才是误报。
+        scope = env
+        if st is not None:
+            scope = dict(env)
+            scope["signal_streak"] = st["streak"]
         try:
-            hit = eval_cond(r["cond"], env)
+            hit = eval_cond(r["cond"], scope)
         except ValueError:
             skipped += 1
             continue
         if not hit:
             continue
-        st = by_no.get(signal_no_of(r))
         state = st["state"] if st else "新增"
         level = st["level_升级"] if st else r["level"]
         if state == "拟解除":
             # 最新时点已不成立，降级提示而不报风险（避免"已经好了还报高"）
             level = "低"
-        ev = ";".join("ew.%s=%s" % (v, env[v])
-                      for v in cond_vars(r["cond"]) if v in env)
+        ev = ";".join("ew.%s=%s" % (v, scope[v])
+                      for v in cond_vars(r["cond"]) if v in scope)
         if st and st.get("trajectory"):
             ev += ";ew.升级轨迹=%s" % st["trajectory"]
         conf = "0.95" if state == "升级" else "0.9"

@@ -18,6 +18,32 @@ vars: |
   id_valid|doc|证件有效|bool|0/1|身份证在有效期内且与申请人一致
   land_right_match|doc|权证与申报一致|bool|0/1|土地承包/经营权证面积与申报一致
   sign_complete|doc|签章完整|bool|0/1|合同/申请表签章齐全
+  # ── 以下 23 个 doc 短码由真超奇在规则扩容时按需新增，已用于 R009-R038。
+  #    契约 IF-4.2 规定新增短码需李昊霖评审；评审通过前请勿在其他 skill 的 cond 中引用。
+  #    取值口径全部写在 skills/sk_doc/references/必备材料清单.md（§7 靶子、§8 脚本衔接）。
+  doc_miss_redline_cnt|doc|缺准入要件数|int|>=0|缺失材料中命中清单「红线」列的项数
+  doc_miss_identity_cnt|doc|身份类缺件数|int|>=0|类别=身份的缺失项数
+  doc_miss_income_cnt|doc|收入类缺件数|int|>=0|类别=收入的缺失项数
+  doc_miss_use_cnt|doc|用途类缺件数|int|>=0|类别=用途的缺失项数
+  doc_miss_guarantee_cnt|doc|担保类缺件数|int|>=0|类别=担保的缺失项数
+  doc_miss_biz_cnt|doc|经营类缺件数|int|>=0|类别=经营的缺失项数
+  doc_miss_contract_cnt|doc|合同支付类缺件数|int|>=0|类别∈{合同,支付}的缺失项数
+  doc_miss_postcheck_cnt|doc|检查类缺件数|int|>=0|类别=检查的缺失项数（贷后）
+  doc_miss_archive_cnt|doc|归档类缺件数|int|>=0|类别=归档的缺失项数（贷后）
+  doc_expired_key_cnt|doc|关键证照过期数|int|>=0|身份证/执照/防疫证/种畜禽证/水域滩涂证/特殊行业许可中已过期项数
+  doc_expired_soon_cnt|doc|证照临期数|int|>=0|距受理日 ≤30 天到期、尚未过期的项数（只提示）
+  doc_inconsist_name_cnt|doc|姓名矛盾处数|int|>=0|申请人署名材料之间的姓名不一致处数
+  doc_inconsist_idno_cnt|doc|证件号矛盾处数|int|>=0|申请人署名材料之间的证件号不一致处数
+  doc_inconsist_amount_cnt|doc|金额矛盾处数|int|>=0|合同/评估值/农机合同金额与申报额度不一致处数
+  doc_inconsist_area_cnt|doc|面积矛盾处数|int|>=0|权证/项目计划书面积与申报面积不一致处数
+  doc_inconsist_date_cnt|doc|日期矛盾处数|int|>=0|签订日晚于放款日等日期倒挂处数
+  doc_sign_missing_cnt|doc|缺签章项数|int|>=0|已提交的应签章材料中签章不齐的项数
+  doc_unknown_type_cnt|doc|清单外材料数|int|>=0|doc[].type 不在必备材料清单内的项数（不计缺件）
+  doc_land_area_dev|doc|权证面积偏差|float|>=0|abs(权证面积-申报面积)/申报面积；申报面积为空时为 None
+  doc_interview_missing|doc|面谈记录未留痕|bool|0/1|贷前未提交面谈记录及影像（2020办法第十八条）
+  doc_first_check_overdue_days|doc|首贷检查超期天数|int|>=0|首次贷后检查晚于放款后 3 个月的天数（2020贷后办法第十五条）
+  doc_onsite_check_shortfall|doc|现场检查次数缺口|int|>=0|按规定频次应做次数 - 已提交检查记录数（2020贷后办法第二十一条）
+  doc_entrust_amt_short|doc|受托支付金额不足|bool|0/1|购销/订单合同金额低于本次提款额（2020办法第二十五条）
 
   # ── dim=cash 流水分析 ──────────────────────────────────────────
   inc_mean|money|月均入账|float|元|统计期内月均入账金额（剔除互转/冲正）
@@ -82,6 +108,48 @@ vars: |
   natural_disaster|ew|受灾标记|bool|0/1|所在地发生气象/病虫害灾害
   price_shock|ew|价格冲击标记|bool|0/1|主营农产品价格同比跌幅超阈值
   guarantee_deplete|ew|担保弱化标记|bool|0/1|抵押物贬值/保证人代偿能力下降
+  # ── 以下 ew 短码由真超奇在规则扩容时按需新增，已用于 E012-E050。
+  #    契约 IF-4.2 规定新增短码需李昊霖评审；评审通过前请勿在其他 skill 的 cond 中引用。
+  #    前 7 个是时序派生量（由 scripts/ew.py trend 算出），其余是 monitor_ts[] 的每时点字段。
+  #    信号定义、触发阈值与处置口径见 skills/sk_ew/references/贷后预警信号.md（§3、§5）。
+  signal_streak|ew|信号连续时点数|int|>=0|该规则所属信号已连续出现的监测时点数（由 ew.py 按 basis 注入）
+  overdue_band_crossed|ew|逾期跨档标记|bool|0/1|最新时点逾期档位升到「次级」及以上（越过 31 天线）
+  n_ts|ew|监测时点数|int|>=0|monitor_ts[] 的时点总数
+  ew_max_streak|ew|最长连续时点数|int|>=0|最新时点仍成立的信号中，连续出现时点数的最大值
+  ew_upgrade_cnt|ew|已升级信号数|int|>=0|状态为「升级」的信号个数（连续≥3 时点或跨档）
+  ew_force_cnt|ew|强制处置信号数|int|>=0|连续 ≥3 个时点仍成立的信号个数（信号表 §3.1）
+  ew_release_cnt|ew|拟解除信号数|int|>=0|最近 ≥2 个时点未出现、待人工确认的信号个数（§3.2）
+  collateral_value_drop|ew|押品估值降幅|float|0-1|押品估值较放款时下降比例
+  other_bank_overdue|ew|他行新增逾期|bool|0/1|他行新增逾期或本行风险分类下调
+  account_frozen_flag|ew|账户冻结标记|bool|0/1|结算账户被冻结或止付
+  check_overdue_days|ew|首贷检查超期天数|int|>=0|首次贷后检查超出发放后 3 个月的天数
+  impersonation_flag|ew|冒顶名贷款|bool|0/1|冒顶名贷款（本人未申请或未使用）
+  multi_borrow_one_use|ew|多人承贷一人用|bool|0/1|违规多人承贷一人使用
+  company_use_personal|ew|个人承贷公司用|bool|0/1|违规个人承贷公司使用
+  aml_level_up|ew|洗钱风险等级升高|bool|0/1|洗钱风险等级升高
+  illegal_fundraise_flag|ew|民间借贷非法集资|bool|0/1|借款人及家庭成员从事民间借贷、非法集资或涉黑涉恶
+  repay_by_new_loan|ew|借新还旧迹象|bool|0/1|以贷还贷/借新还旧迹象
+  fund_backflow_flag|ew|资金回流关联方|bool|0/1|贷款资金回流借款人或其关联方
+  split_disburse_flag|ew|化整为零支付|bool|0/1|化整为零规避受托支付
+  forbidden_use_flag|ew|流入禁止领域|bool|0/1|资金流入房地产、股市、理财等禁止领域
+  litigation_flag|ew|涉诉或被执行|bool|0/1|涉诉或被列为被执行人
+  guarantor_ability_down|ew|保证人代偿力下降|bool|0/1|保证人代偿能力下降
+  joint_guarantee_risk|ew|联保体成员出险|bool|0/1|联保体成员出险
+  new_multi_lend_post|ew|贷后新增多头家数|int|>=0|贷后新增多头借贷家数
+  collateral_disposed_flag|ew|押品被擅自处置|bool|0/1|抵质押物被擅自赠与、转让、再抵押
+  convicted_flag|ew|家庭成员被判刑|bool|0/1|借款人及家庭成员从事违法犯罪活动被判刑
+  check_freq_shortfall|ew|检查频次缺口|int|>=0|贷后现场检查次数低于规定频次的差额
+  biz_idle_flag|ew|经营场所闲置停产|bool|0/1|经营场所闲置或停产
+  penalty_flag|ew|受到行政处罚|bool|0/1|受到行政处罚
+  family_change_flag|ew|家庭主要成员变故|bool|0/1|家庭主要成员重大变故
+  staff_drop_ratio|ew|用工规模降幅|float|0-1|用工规模下降比例
+  mortgage_reg_expired|ew|抵押登记失效|bool|0/1|抵押登记失效或未续登
+  epidemic_flag|ew|重大动物疫情|bool|0/1|所在地发生重大动物疫情
+  policy_shock_flag|ew|产业政策调整|bool|0/1|产业政策或禁养区调整
+  agri_insurance_lapse|ew|农业保险失效|bool|0/1|农业保险失效或未续保
+  upstream_down_flag|ew|上下游经营恶化|bool|0/1|上下游客户经营恶化
+  refuse_check_flag|ew|拒绝配合检查|bool|0/1|拒绝或阻挠贷后检查
+  query_surge_post|ew|贷后查询骤增|bool|0/1|贷后征信查询异常骤增
 
 # 阈值分组：同一口径在不同环节的取值差异（供 stage_adaptation 引用）
 thresholds: |

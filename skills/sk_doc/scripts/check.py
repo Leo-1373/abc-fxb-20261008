@@ -3,14 +3,19 @@
 """sk_doc 材料逐项比对与规则求值（契约 IF-1.3 / IF-5.5）。
 
 三个子命令：
-  check      材料清单 + 申请信息 → doc 维度短码（缺件 / 过期 / 矛盾 / 红线）
+  check      材料清单 + 申请信息 → doc 维度短码（缺件 / 过期 / 矛盾 / 红线 / 流程合规）
   evaluate   短码 + 规则闭包 → L1 摘要 / L2 证据明细
   selfcheck  闭包自检
 
 为什么比对放在脚本里而不是让模型逐项看（分工.md P3 任务 3）：
   1. 材料几十项，模型逐项比对又慢又容易漏，而且漏了不报错
   2. 比对是确定性的活，天然幂等——同输入同输出
-  3. 只回传 6 个短码，不把整张材料表送进主智能体上下文
+  3. 只回传短码，不把整张材料表送进主智能体上下文
+
+短码按「能不能给出不同处置动作」拆开，而不是只给总数：
+缺件按类别拆（缺经营材料找村委、缺担保材料找保证人）、
+矛盾按比对项拆（姓名矛盾要核身份、金额矛盾要核合同）。
+阈值与口径全部写在 必备材料清单.md（§5 核验要点、§7 靶子、§8 脚本衔接）。
 
 **必备材料清单.md 是本脚本的输入**：清单改了，脚本行为跟着改，不需要动代码。
 这正是 skill.md 里「先跑脚本聚合，模型只做判断」的落地方式。
@@ -47,6 +52,40 @@ COMPARE_RULES = [
 # 应签章处（必备材料清单 §5.3）。缺签章 ≠ 缺件，两者分开计。
 SIGN_ITEMS = {"LOAN_APPLY", "LOAN_CONTRACT", "GUARANTEE_CONTRACT",
               "GUARANTOR_CONSENT", "JOINT_GUARANTEE_PACT", "COOWNER_CONSENT"}
+
+# 关键证照：过期即需换发后才能受理，与普通佐证件分开计数（必备材料清单 §5.1）。
+# 身份证过期另有 id_valid==0（R005）拦一道，故此处不再单列身份证。
+KEY_CERT_TYPES = {"BIZ_LICENSE", "ANIMAL_HEALTH_CERT", "BREED_PERMIT",
+                  "WATER_PERMIT", "SPECIAL_PERMIT"}
+
+# 缺件按「类别」拆分（清单 §1–§3 第 4 列）。总数给不出处置动作，
+# 拆开才知道该找谁补——缺经营材料找村委，缺担保材料找保证人。
+MISS_CATEGORIES = {
+    "doc_miss_identity_cnt": {"身份"},
+    "doc_miss_income_cnt": {"收入"},
+    "doc_miss_use_cnt": {"用途"},
+    "doc_miss_guarantee_cnt": {"担保"},
+    "doc_miss_biz_cnt": {"经营"},
+    "doc_miss_contract_cnt": {"合同", "支付"},
+    "doc_miss_postcheck_cnt": {"检查"},
+    "doc_miss_archive_cnt": {"归档"},
+}
+
+# 跨材料比对项 → 计数短码（清单 §5.2）。矛盾按比对项拆开才能说清「跟谁核什么」。
+INCONSIST_CODES = {"name": "doc_inconsist_name_cnt",
+                   "id_no": "doc_inconsist_idno_cnt",
+                   "area": "doc_inconsist_area_cnt",
+                   "amount": "doc_inconsist_amount_cnt",
+                   "date": "doc_inconsist_date_cnt"}
+
+# 临期预警窗口：距受理日 ≤30 天到期只提示，不算过期（清单 §5.1）
+EXPIRED_SOON_DAYS = 30
+# 首贷检查期限：发放后 3 个月内（2020贷后办法第十五条）
+FIRST_CHECK_MONTHS = 3
+# 现场检查频次分档（2020贷后办法第二十一条(二)1/2）：信用、非信用两条尺子。
+# 低于起档的属「现场抽查」（按管理户数比例），不按固定次数考核 → 返回 None。
+ONSITE_CHECK_TIERS = {"信用": [(300000, 1000000, 1), (1000000, None, 2)],
+                      "非信用": [(500000, 2000000, 1), (2000000, None, 2)]}
 
 # 情形推断关键词。故意写得保守——宁可留给模型判（进 unresolved），也不要瞎猜。
 # 条件项没命中 → **不计入缺件**（必备材料清单 §0 纪律 2）。
@@ -112,6 +151,60 @@ def parse_checklist(path):
     if not items:
         return None, "清单里没有解析到材料表（表头应为 %s）" % header
     return items, None
+
+
+def parse_type_codes(path):
+    """取清单里**全部**材料 type 代码——含 §1.1/§2.1/§3.1 的经办留档附表。
+
+    只认 `type|` 打头的代码块。附表用的表头与主表不同（7 列），
+    `parse_checklist` 会按表头精确匹配跳过它们，但**它们仍是合法 type**：
+    不收集就会把「面谈记录」「贷后现场检查表」误判成"清单外材料"。
+    """
+    if not os.path.isfile(path):
+        return set()
+    out, in_block, first = set(), False, None
+    for line in open(path, "r", encoding="utf-8").read().splitlines():
+        if line.strip().startswith("```"):
+            in_block, first = (not in_block), None
+            continue
+        if not in_block:
+            continue
+        if first is None:
+            first = line.strip()
+            continue
+        if first.startswith("type|"):
+            code = line.split("|")[0].strip()
+            if code:
+                out.add(code)
+    return out
+
+
+DATE_RE = re.compile(r"^\s*(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})")
+
+
+def _date(v):
+    """取日期值。取不出来返回 None——**绝不默认为今天**（契约 IF-1.4）。
+
+    容忍 `2030-01-01` / `2030-1-1` / `2030/1/1` 三种写法：材料上的日期是客户填的，
+    格式不统一很常见。**但解析不出来必须返回 None 而不是猜**——把"读不懂"
+    当成"已过期"会凭空判一条证照过期（高）。
+    """
+    m = DATE_RE.match(str(v or ""))
+    if not m:
+        return None
+    try:
+        return datetime.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    except ValueError:
+        return None
+
+
+def _add_months(d, months):
+    """加 N 个自然月，日按目标月天数截断（3-31 + 1 月 → 4-30）。"""
+    y, m = d.year, d.month + months
+    y, m = y + (m - 1) // 12, (m - 1) % 12 + 1
+    leap = y % 4 == 0 and (y % 100 != 0 or y % 400 == 0)
+    last = [31, 29 if leap else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1]
+    return datetime.date(y, m, min(d.day, last))
 
 
 def condition_of(item):
@@ -193,7 +286,7 @@ def _value_of(doc_item, field):
     return (doc_item.get("fields") or {}).get(field)
 
 
-def check(doc, applicant, stage, items, situations, as_of):
+def check(doc, applicant, stage, items, situations, as_of, known_types=None):
     """核心比对。返回 (metrics, facts, notes)。"""
     applicant = applicant or {}
     notes = []
@@ -210,30 +303,43 @@ def check(doc, applicant, stage, items, situations, as_of):
     unresolved = sorted({c for p in pending if p["type"] not in present
                          for c in p["conds"]})
 
-    # ① 缺件
+    # ① 缺件（总数 + 按类别拆 + 命中红线的件数）
     miss = [it for it in required if it["type"] not in present]
     miss_names = [it["名称"] for it in miss]
     redline_hit = 1 if any(it.get("红线") == "1" for it in miss) else 0
+    miss_cat = {code: 0 for code in MISS_CATEGORIES}
+    for it in miss:
+        for code, cats in MISS_CATEGORIES.items():
+            if it.get("类别") in cats:
+                miss_cat[code] += 1
+    doc_miss_redline_cnt = len([it for it in miss if it.get("红线") == "1"])
 
-    # ② 过期。expire_date 为空 = 没有有效期，**不是过期**。
-    expired = []
+    # ② 过期。expire_date 为空 = 没有有效期，**不是过期**（清单 §5.1）。
+    #    临期（≤30 天）与已过期分开，临期只提示、不算过期。
+    expired, expired_key, expired_soon = [], [], []
+    as_of_d = _date(as_of)
+    soon_d = as_of_d + datetime.timedelta(days=EXPIRED_SOON_DAYS) if as_of_d else None
     for d in doc:
-        exp = _value_of(d, "expire_date")
-        if not exp or not as_of:
+        exp = _date(_value_of(d, "expire_date"))
+        if exp is None or as_of_d is None:
             continue
-        if str(exp) < str(as_of):
+        if exp < as_of_d:
             expired.append(d.get("type"))
+            if d.get("type") in KEY_CERT_TYPES:
+                expired_key.append(d.get("type"))
+        elif soon_d and exp <= soon_d:
+            expired_soon.append(d.get("type"))
 
-    # ③ 跨材料矛盾：同一事实对不上，逐处计 1。
+    # ③ 跨材料矛盾：同一事实对不上，逐处计 1；同时记下**比对项**以便分类计数。
     #    任一侧缺值一律跳过——缺值是"没数据"，不是"对不上"。
-    inconsis = []
+    inconsis = []          # [(比对项, 描述)]
     for field, types, app_key in COMPARE_RULES:
         declared = _norm(applicant.get(app_key))
         for t in sorted(types):
             for d in present.get(t, []):
                 got = _norm(_value_of(d, field))
                 if got is not None and declared is not None and got != declared:
-                    inconsis.append("%s.%s=%s≠申报%s" % (t, field, got, declared))
+                    inconsis.append((field, "%s.%s=%s≠申报%s" % (t, field, got, declared)))
         # 材料之间互比（≥2 份材料都写了这个字段时）
         seen = [(t, _norm(_value_of(d, field)))
                 for t in sorted(types) for d in present.get(t, [])]
@@ -241,47 +347,139 @@ def check(doc, applicant, stage, items, situations, as_of):
         for i in range(len(seen)):
             for j in range(i + 1, len(seen)):
                 if seen[i][1] != seen[j][1]:
-                    inconsis.append("%s.%s≠%s.%s" % (seen[i][0], field, seen[j][0], field))
+                    inconsis.append((field, "%s.%s≠%s.%s"
+                                     % (seen[i][0], field, seen[j][0], field)))
+
+    # ③b 日期倒挂（清单 §5.2「日期」行）：合同签订日晚于放款日、或早于申请日。
+    #     两个日期任一缺值 → 不判（缺值是"没数据"，不是"矛盾"）。
+    disburse_d = _date(applicant.get("disburse_date"))
+    apply_d = _date(applicant.get("apply_date"))
+    for d in doc:
+        sd = _date(_value_of(d, "sign_date"))
+        if sd is None:
+            continue
+        if disburse_d and sd > disburse_d:
+            inconsis.append(("date", "%s.sign_date=%s>放款日%s"
+                             % (d.get("type"), sd, disburse_d)))
+        if apply_d and sd < apply_d:
+            inconsis.append(("date", "%s.sign_date=%s<申请日%s"
+                             % (d.get("type"), sd, apply_d)))
+
+    inconsis_by = {f: len([1 for it in inconsis if it[0] == f]) for f in INCONSIST_CODES}
 
     # ④ 身份证核验：在有效期内 且 与申请人一致。缺件 → None（不可判为 0）
     id_valid = None
     for d in present.get("ID_CARD", []):
-        exp = _value_of(d, "expire_date")
+        exp = _date(_value_of(d, "expire_date"))
         name_ok = (_norm(_value_of(d, "name")) == _norm(applicant.get("name"))
                    or _norm(d.get("holder")) == _norm(applicant.get("name")))
-        date_ok = (not exp) or (not as_of) or (str(exp) >= str(as_of))
+        date_ok = (exp is None) or (as_of_d is None) or (exp >= as_of_d)
         id_valid = 1 if (name_ok and date_ok) else 0
 
     # ⑤ 土地权属：面积偏差是否在 ±5% 内。任一侧缺值 → None
-    land_right_match = None
+    #    偏差比例同时回传，供「接近容差」的苗头规则使用。
+    land_right_match, land_area_dev = None, None
     declared_area = _num(applicant.get("declared_area"))
     for d in present.get("LAND_CERT", []):
         got = _num(_value_of(d, "area"))
         if got is None or declared_area in (None, 0):
             continue
-        land_right_match = 1 if abs(got - declared_area) / declared_area <= AREA_TOLERANCE else 0
+        land_area_dev = round(abs(got - declared_area) / declared_area, 4)
+        land_right_match = 1 if land_area_dev <= AREA_TOLERANCE else 0
 
     # ⑥ 签章齐全性。只看**已提交**的应签章材料——没交属于缺件，另行计数。
-    sign_complete = None
+    sign_complete, sign_missing_cnt = None, 0
     for t in sorted(SIGN_ITEMS):
         for d in present.get(t, []):
             f = d.get("fields") or {}
             if f.get("sign_complete") is False:
-                sign_complete = 0
+                ok = False
             elif f.get("sign_complete") is True:
-                sign_complete = sign_complete if sign_complete == 0 else 1
+                ok = True
             else:
                 need = _num(f.get("seal_required")) or 1.0
                 got = _num(f.get("seal_count"))
-                if got is not None and got < need:
-                    sign_complete = 0
-                elif sign_complete is None:
-                    sign_complete = 1
+                ok = not (got is not None and got < need)
+            if sign_complete is None:
+                sign_complete = 1
+            if not ok:
+                sign_complete, sign_missing_cnt = 0, sign_missing_cnt + 1
+
+    # ⑦ 清单未覆盖的材料类型：**不当作缺件**（可能是清单还没收录的新材料），
+    #    只报出来供迭代（清单 §8）。缺 known_types 时不判，避免把附表误判成未知。
+    unknown_types = None
+    if known_types:
+        unknown_types = sorted({d.get("type") for d in doc
+                                if d.get("type") and d.get("type") not in known_types})
+
+    # ⑧ 首贷检查超期（2020贷后办法第十五条：发放后 3 个月内）。
+    #    只拿到检查日才判超期；记录整份没交 → 交给缺件规则 R017，不重复报。
+    first_check_overdue_days = None
+    if stage == "贷后" and disburse_d:
+        due = _add_months(disburse_d, FIRST_CHECK_MONTHS)
+        for d in present.get("FIRST_POST_CHECK", []):
+            done = _date(_value_of(d, "check_date")) or _date(_value_of(d, "sign_date"))
+            if done:
+                first_check_overdue_days = max(0, (done - due).days)
+
+    # ⑨ 现场检查频次（2020贷后办法第二十一条(二)）：按额度与担保方式分档。
+    #    口径简化：监测期不足一年时按「每年至少 N 次」直接比 N 次，不做年度折算。
+    #    低于起档额度的属"现场抽查"（按管理户数比例），没有固定次数 → None。
+    onsite_check_shortfall = None
+    if stage == "贷后":
+        amt = _num(applicant.get("declared_amount"))
+        gua = str(applicant.get("guarantee_type") or "")
+        bar = "信用" if ("信用" in gua and "保证" not in gua) else "非信用"
+        req = None
+        if amt:
+            for lo, hi, n in ONSITE_CHECK_TIERS[bar]:
+                if amt >= lo and (hi is None or amt < hi):
+                    req = n
+                    break
+        if req is not None:
+            onsite_check_shortfall = max(0, req - len(present.get("POST_CHECK_FORM", [])))
+
+    # ⑩ 面谈留痕（2020办法第十八条）。只判贷前；非现场核实有豁免，
+    #    故这是"未留痕"的事实，不是"违规"的判定。
+    interview_missing = None
+    if stage == "贷前":
+        interview_missing = 0 if present.get("INTERVIEW_RECORD") else 1
+
+    # ⑪ 受托支付合同金额（2020办法第二十五条）：购销合同金额低于申请额度即不足。
+    entrust_amt_short, declared_amount = None, _num(applicant.get("declared_amount"))
+    for d in present.get("PURCHASE_CONTRACT", []):
+        amt = _num(_value_of(d, "amount"))
+        if amt is None or declared_amount in (None, 0):
+            continue
+        entrust_amt_short = 1 if amt < declared_amount else 0
 
     metrics = {
         "doc_miss_cnt": len(miss),
+        "doc_miss_redline_cnt": doc_miss_redline_cnt,
+        "doc_miss_identity_cnt": miss_cat["doc_miss_identity_cnt"],
+        "doc_miss_income_cnt": miss_cat["doc_miss_income_cnt"],
+        "doc_miss_use_cnt": miss_cat["doc_miss_use_cnt"],
+        "doc_miss_guarantee_cnt": miss_cat["doc_miss_guarantee_cnt"],
+        "doc_miss_biz_cnt": miss_cat["doc_miss_biz_cnt"],
+        "doc_miss_contract_cnt": miss_cat["doc_miss_contract_cnt"],
+        "doc_miss_postcheck_cnt": miss_cat["doc_miss_postcheck_cnt"],
+        "doc_miss_archive_cnt": miss_cat["doc_miss_archive_cnt"],
         "doc_expired_cnt": len(expired),
+        "doc_expired_key_cnt": len(expired_key),
+        "doc_expired_soon_cnt": len(expired_soon),
         "doc_inconsist_cnt": len(inconsis),
+        "doc_inconsist_name_cnt": inconsis_by["name"],
+        "doc_inconsist_idno_cnt": inconsis_by["id_no"],
+        "doc_inconsist_area_cnt": inconsis_by["area"],
+        "doc_inconsist_amount_cnt": inconsis_by["amount"],
+        "doc_inconsist_date_cnt": inconsis_by["date"],
+        "doc_sign_missing_cnt": sign_missing_cnt,
+        "doc_unknown_type_cnt": None if unknown_types is None else len(unknown_types),
+        "doc_land_area_dev": land_area_dev,
+        "doc_interview_missing": interview_missing,
+        "doc_first_check_overdue_days": first_check_overdue_days,
+        "doc_onsite_check_shortfall": onsite_check_shortfall,
+        "doc_entrust_amt_short": entrust_amt_short,
         "id_valid": id_valid,
         "land_right_match": land_right_match,
         "sign_complete": sign_complete,
@@ -291,9 +489,12 @@ def check(doc, applicant, stage, items, situations, as_of):
         "miss_cnt": len(miss),
         "redline_hit": redline_hit,
         "expired_types": ",".join(sorted(set(t for t in expired if t))),
-        "inconsist": ";".join(inconsis),
+        "expired_key_types": ",".join(sorted(set(t for t in expired_key if t))),
+        "inconsist": ";".join(t for _, t in inconsis),
         "stage": stage,
     }
+    if unknown_types:
+        facts["unknown_types"] = ",".join(unknown_types)
     if unresolved:
         shown = ",".join(unresolved[:10]) + ("…" if len(unresolved) > 10 else "")
         notes.append("%d 个条件情形未能判定，相关材料未计入缺件：%s"
@@ -372,8 +573,10 @@ def evaluate(rules, metrics, facts, stage="贷前"):
 
 
 def facts_line(facts):
-    order = ["miss_types", "miss_cnt", "redline_hit", "expired_types", "inconsist", "stage"]
-    return "facts@doc|" + "|".join("%s=%s" % (k, facts[k]) for k in order if facts.get(k) not in (None, ""))
+    order = ["miss_types", "miss_cnt", "redline_hit", "expired_types",
+             "expired_key_types", "unknown_types", "inconsist", "stage"]
+    return "facts@doc|" + "|".join("%s=%s" % (k, facts[k])
+                                   for k in order if facts.get(k) not in (None, ""))
 
 
 # ── selfcheck ─────────────────────────────────────────────────────
@@ -434,7 +637,8 @@ def main():
         as_of = data.get("as_of") or applicant.get("as_of") or \
             datetime.date.today().isoformat()
         metrics, facts, notes = check(data.get("doc"), applicant, args.stage,
-                                      items, situations, as_of)
+                                      items, situations, as_of,
+                                      known_types=parse_type_codes(args.checklist))
         if metrics is None:
             print(json.dumps({"coverage": "partial", "reason": notes[0],
                               "findings": []}, ensure_ascii=False))
