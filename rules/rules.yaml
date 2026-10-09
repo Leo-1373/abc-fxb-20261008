@@ -240,6 +240,14 @@ rules: |
   E048|ew|overdue_days>30 && signal_streak>=3|高|逾期持续恶化|依法追偿|贷后预警信号1|sk_ew
   E049|ew|biz_abnormal==1 && signal_streak>=2|高|经营异常持续存在|压降额度并追加担保|贷后预警信号5|sk_ew
   E050|ew|contact_fail==1 && signal_streak>=4|高|客户长期失联|上门走访并评估处置|贷后预警信号8|sk_ew
+  # 信号42–45 · 风险线索类（《农户贷款风险线索核查处置操作规程（试行）》
+  # 农银规章〔2020〕70号 第八条的分级；110号第十六条点名该规程）。
+  # 这几条来自**系统线索**而非客户经理回访，是 110号 第三十条/三十一条之外
+  # 另一套明文的风险清单——原先一条规则都没有。
+  E051|ew|multi_loan_same_account==1|高|多户资金归集|核实资金挪用并追偿|贷后预警信号42|sk_ew
+  E052|ew|multi_loan_same_repay==1|中|多户同账户还款|核实代偿与归集还款|贷后预警信号43|sk_ew
+  E053|ew|batch_cash_repay==1|中|批量现金还款|核实现金还款来源|贷后预警信号44|sk_ew
+  E054|ew|staff_client_fund==1|高|员工客户资金往来|移交内部合规核查|贷后预警信号45|sk_ew
 
 # 等级合成规则（仅 sk_rules 使用，契约 D2）
 # 输入：全部 finding 的 level 集合  →  输出：整体 risk.level

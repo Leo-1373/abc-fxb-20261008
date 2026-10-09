@@ -150,6 +150,13 @@ vars: |
   upstream_down_flag|ew|上下游经营恶化|bool|0/1|上下游客户经营恶化
   refuse_check_flag|ew|拒绝配合检查|bool|0/1|拒绝或阻挠贷后检查
   query_surge_post|ew|贷后查询骤增|bool|0/1|贷后征信查询异常骤增
+  # ── 以下 4 个 ew 短码来自《农户贷款风险线索核查处置操作规程（试行）》
+  #    农银规章〔2020〕70号 第八条的风险线索分级；110号第十六条点名该规程。
+  #    由**系统线索**下发（不是客户经理回访判断），逐时点给。
+  multi_loan_same_account|ew|多户资金流向同账户|bool|0/1|多户贷款资金流向同一账户（关注类线索）
+  multi_loan_same_repay|ew|多户同账户还款|bool|0/1|多户贷款由同一账户还款（关注类线索）
+  batch_cash_repay|ew|批量现金还款|bool|0/1|短期内批量以现金方式还款（关注类线索）
+  staff_client_fund|ew|员工客户资金往来|bool|0/1|本行员工与客户发生资金往来（重大类线索）
 
 # 阈值分组：同一口径在不同环节的取值差异（供 stage_adaptation 引用）
 thresholds: |

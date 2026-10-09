@@ -235,7 +235,10 @@ def _timepoint_env(ts, prev_balance):
               "other_bank_overdue", "new_multi_lend_post", "query_surge_post",
               "check_overdue_days", "impersonation_flag", "multi_borrow_one_use",
               "company_use_personal", "aml_level_up", "collateral_disposed_flag",
-              "illegal_fundraise_flag", "convicted_flag", "check_freq_shortfall"):
+              "illegal_fundraise_flag", "convicted_flag", "check_freq_shortfall",
+              # 〔2020〕70号第八条的风险线索类型（110号第十六条点名该规程）
+              "multi_loan_same_account", "multi_loan_same_repay", "batch_cash_repay",
+              "staff_client_fund"):
         if ts.get(k) is not None:
             env[k] = ts[k]
     bal = _num(ts.get("balance"))
