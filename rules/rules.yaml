@@ -134,13 +134,13 @@ rules: |
 
   # ── dim=ew · owner=sk_ew ──────────────────────────────────────
   E001|ew|overdue_days>=1 && overdue_days<=30|中|出现逾期|电话催收并核实原因|贷后预警信号1|sk_ew
-  E002|ew|overdue_days>30 && overdue_days<=90|高|逾期超30天|现场催收并评估处置|贷后预警信号1|sk_ew
-  E003|ew|overdue_days>90|高|逾期超90天转不良|启动资产保全|贷后预警信号1|sk_ew
+  E002|ew|overdue_days>30 && overdue_days<=90|高|逾期超30天|上门催收并评估处置|贷后预警信号1|sk_ew
+  E003|ew|overdue_days>90|高|逾期超90天转不良|依法追偿|贷后预警信号1|sk_ew
   E004|ew|use_dev_flag==1|高|贷后资金用途偏离|要求说明资金去向|贷后预警信号3|sk_ew
   E005|ew|biz_abnormal==1|高|经营主体异常|核实经营存续状态|贷后预警信号5|sk_ew
   E006|ew|contact_fail==1|中|客户失联|上门走访核实|贷后预警信号8|sk_ew
   E007|ew|bal_drop>0.5|低|余额大幅下降|继续观察余额变动|贷后预警信号4|sk_ew
-  E008|ew|repay_delay_cnt>=3|中|还款延迟频繁|提示还款纪律|贷后预警信号2|sk_ew
+  E008|ew|repay_delay_cnt>=3|中|还款延迟频繁|提示还款纪律并增频检查|贷后预警信号2|sk_ew
   E009|ew|natural_disaster==1|高|遭受自然灾害|核实损失并评估展期|贷后预警信号6|sk_ew
   E010|ew|price_shock==1|中|主营产品价格冲击|评估收入影响|贷后预警信号7|sk_ew
   E011|ew|guarantee_deplete==1|高|担保弱化|追加担保或压降|贷后预警信号9|sk_ew
