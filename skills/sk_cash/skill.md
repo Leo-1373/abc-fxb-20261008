@@ -3,7 +3,7 @@ name: sk_cash
 description: 农户贷款银行流水分析——收入稳定性、异常交易、资金用途偏离、还款来源核查。
 version: 1.0.0
 contract: v1
-input_slots: [txn[], period, purpose, declared_inc, stage]
+input_slots: [txn[], period, purpose, declared_inc, industry, stage]
 output_keys: [findings@cash[], income_est{}]
 rules_required:
   dims: [cash]
@@ -35,6 +35,7 @@ max_reads: 2
 | `period` | `{from,to}` | 否 | 统计期。缺省则取 `txn` 覆盖的全部月份 |
 | `purpose` | str | 是 | 申报贷款用途，用于用途偏离判定 |
 | `declared_inc` | float | 否 | 申报月收入，用于交叉对账（透传给 `sk_rules`） |
+| `industry` | str | 否 | 经营品类（如"种植/养殖/农机服务"）。用于季节性识别，缺失按非季节性处理 |
 | `stage` | str | 否 | 贷前/贷中/贷后，缺省贷前 |
 
 `txn` 缺失或为空 → 输出空 findings + `coverage: partial`，**不臆测**。

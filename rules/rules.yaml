@@ -84,9 +84,9 @@ rules: |
   R036|doc|doc_entrust_amt_short==1|高|受托支付金额不足|补足受托支付凭证|必备材料清单7-36|sk_doc
 
   # ── dim=cash · owner=sk_cash ──────────────────────────────────
-  R101|cash|inc_cv>0.5 && gap_cnt>=3|高|收入波动叠加断档|核实收入波动原因|流水分析要点3|sk_cash
-  R102|cash|inc_cv>0.5|中|收入稳定性不足|关注收入稳定性|流水分析要点3|sk_cash
-  R103|cash|gap_cnt>=3|中|经营连续性中断|核实经营连续性|流水分析要点4|sk_cash
+  R101|cash|inc_cv>0.5 && gap_cnt>=3 && seasonal_flag==0|高|收入波动叠加断档|核实收入波动原因|流水分析要点3|sk_cash
+  R102|cash|inc_cv>0.5 && seasonal_flag==0|中|收入稳定性不足|关注收入稳定性|流水分析要点3|sk_cash
+  R103|cash|gap_cnt>=3 && seasonal_flag==0|中|经营连续性中断|核实经营连续性|流水分析要点4|sk_cash
   # 分档原则：同一变量只用互不重叠的区间分档（金宇桐复审项）。
   # R104 原为 top1_share>0.6，与 R105（>0.85 高）区间嵌套 → 同一现象出现"中+高"两个等级；
   # 现收窄到 (0.6, 0.85]，与 R105 互补。经 eval/contract_tests.py 验证行为不变
@@ -98,8 +98,27 @@ rules: |
   R108|cash|bal_min<=0|高|账户曾透支|核实账户透支原因|流水分析要点6|sk_cash
   R109|cash|night_txn_share>0.3|低|非经营时段交易偏多|留意交易时段异常|流水分析要点9|sk_cash
   R110|cash|cash_inc_ratio>0.7|中|现金收入占比过高|核实现金收入来源|流水分析要点10|sk_cash
-  R111|cash|inc_cv>0.7 && top1_share>0.7|高|收入不稳且对手单一|核实收入可持续性|流水分析要点3+7|sk_cash
+  R111|cash|inc_cv>0.7 && top1_share>0.7 && seasonal_flag==0|高|收入不稳且对手单一|核实收入可持续性|流水分析要点3+7|sk_cash
   R112|cash|loan_use_dev>0.1 && loan_use_dev<=0.3|中|资金用途轻微偏离|补充用途说明|流水分析要点11|sk_cash
+
+  # ── dim=cash 扩容 · owner=sk_cash（严军超补，12 → 24 条）──────────────
+  # 设计要点：①季节性用 seasonal_flag 把"真断档/真波动"与"季节性停收/波动"分开，
+  # R101/R102/R103/R111 及下面 R117-R120、R124 都加 seasonal_flag==0 豁免——
+  # 种粮/养殖户春秋停收、单笔秋收大额入账、交易笔数少、近期淡季无入账都是正常现象，
+  # 不该判中/高（分工.md 点名缺口，挂靠 50号文§17 生产周期）；
+  # ②同一变量只用互不重叠区间分档（R119/R120、R117/R118 互补，不嵌套）。
+  R113|cash|gap_cnt>=3 && seasonal_flag==1|低|季节性停收|匹配生产周期核定|流水分析要点4|sk_cash
+  R114|cash|inc_cv>0.5 && seasonal_flag==1|低|季节性收入波动|匹配生产周期核定|流水分析要点3|sk_cash
+  R115|cash|top1_debit_share>0.6 && top1_debit_share<=0.85|低|上游供应商集中|关注采购渠道集中|流水分析要点7|sk_cash
+  R116|cash|top1_debit_share>0.85|中|单一上游高度依赖|核实供应渠道稳定性|流水分析要点7|sk_cash
+  R117|cash|txn_per_month<2 && n_txn>0 && seasonal_flag==0|中|流水笔数过少|补充完整流水记录|流水分析要点1|sk_cash
+  R118|cash|txn_per_month>=2 && txn_per_month<5 && seasonal_flag==0|低|流水笔数偏少|关注流水完整性|流水分析要点1|sk_cash
+  R119|cash|large_in_share>0.5 && large_in_share<=0.7 && seasonal_flag==0|中|单笔入账占比过高|核实大额入账来源|流水分析要点8|sk_cash
+  R120|cash|large_in_share>0.7 && seasonal_flag==0|高|疑似垫资过桥资金|核实大额入账真实性|流水分析要点8|sk_cash
+  R121|cash|p2p_cnt>=1|高|涉民间借贷往来|核实民间融资情况|流水分析要点8|sk_cash
+  R122|cash|large_cash_out>=1|中|大额现金支取|核实现金支取用途|流水分析要点10|sk_cash
+  R123|cash|round_trip_cnt>=2|中|当日等额对敲|核实流水真实性|流水分析要点8|sk_cash
+  R124|cash|recent_in_ratio<0.5 && seasonal_flag==0|中|近期收入锐减|核实经营是否恶化|流水分析要点3|sk_cash
 
   # ── dim=cred · owner=sk_cred ──────────────────────────────────
   R201|cred|dti>0.55|高|负债率超限|压降额度或追加担保|征信审查要点2|sk_cred

@@ -55,6 +55,18 @@ vars: |
   loan_use_dev|cash|用途偏离度|float|0-1|与申报用途无关的大额出账占比
   night_txn_share|cash|非经营时段占比|float|0-1|22:00-06:00 交易笔数占比
   cash_inc_ratio|cash|现金入账占比|float|0-1|现金存入 / 总入账；过高说明收入难验证
+  # ── 以下 9 个 cash 短码由严军超在规则扩容时按需新增，已用于 R113-R124。
+  #    契约 IF-4.2 规定新增短码需李昊霖评审；评审通过前请勿在其他 skill 的 cond 中引用。
+  #    取值口径全部写在 skills/sk_cash/references/流水分析要点.md（要点1/3/4/7/8/10）。
+  seasonal_flag|cash|季节性经营标记|bool|0/1|经营品类属于季节性农业（种植/养殖等）时为1；industry缺失默认0
+  top1_debit_share|cash|最大对手出账占比|float|0-1|单一交易对手出账额 / 总出账额；无出账时为 None
+  n_txn|cash|有效交易笔数|int|>=0|剔除内部交易（互转/冲正/利息/退款）后的交易笔数
+  txn_per_month|cash|月均交易笔数|float|>=0|有效交易笔数 / 统计期月数
+  large_in_share|cash|单笔最大入账占比|float|0-1|单笔最大入账额 / 总入账额；无入账时为 None
+  p2p_cnt|cash|民间借贷往来对手数|int|>=0|交易对手命中网贷/民间借贷关键词的个数
+  large_cash_out|cash|大额现金取现笔数|int|>=0|渠道为现金且出账>=5000元的笔数
+  round_trip_cnt|cash|当日等额对敲次数|int|>=0|同一自然日内入账与出账金额相等（差<1元）的对数
+  recent_in_ratio|cash|近期入账比|float|>=0|最近2个完整月入账 / 更早2个完整月入账；不足4个月或更早期无入账时为 None
 
   # ── dim=cred 征信负债 ──────────────────────────────────────────
   dti|cred|债务收入比|float|0-1|月均还款额 / 月均收入

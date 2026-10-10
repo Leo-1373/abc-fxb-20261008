@@ -34,6 +34,12 @@ LARGE_DEBIT = 5000.0
 # 与申报用途相关的通用农业词（用于用途偏离判定，流水分析要点11）
 AGRI_WORDS = ["农资", "化肥", "种子", "农药", "农机", "饲料", "兽药", "地租",
               "承包", "大棚", "苗木", "牲畜", "仔猪", "鱼苗", "柴油", "水电"]
+# 季节性经营品类（流水分析要点3/4）——命中即 seasonal_flag=1
+SEASONAL_INDUSTRIES = ["种植", "种粮", "粮食", "养殖", "畜牧", "水产", "苗木", "蔬菜",
+                       "水果", "茶叶", "棉花", "油料", "中药材", "大棚", "林果", "花卉", "甘蔗"]
+# 民间借贷/网贷对手关键词（流水分析要点8）
+P2P_WORDS = ["网贷", "借呗", "微粒贷", "花呗", "白条", "小额贷款", "民间借贷", "典当",
+             "担保公司", "融资租赁", "消费金融", "现金贷", "网络小贷"]
 
 
 # ── aggregate ─────────────────────────────────────────────────────
@@ -51,6 +57,38 @@ def _purpose_words(purpose):
     if not purpose:
         return []
     return [w for w in re.split(r"[、,，/\s]+", purpose) if len(w) >= 2]
+
+
+def _seasonal_flag(industry):
+    """季节性经营标记（要点3/4）。industry 缺失默认 0——保持既有断档/波动判定不回退。"""
+    if not industry:
+        return 0
+    return 1 if any(w in str(industry) for w in SEASONAL_INDUSTRIES) else 0
+
+
+def _round_trips(txns):
+    """当日等额对敲次数（要点8）：同一自然日内入账与出账金额相等（差<0.01元）的对数。"""
+    day = {}
+    for t in txns:
+        d = t["date"][:10]
+        day.setdefault(d, {"in": [], "out": []})
+        a = round(t["amt"], 2)
+        (day[d]["in"] if a > 0 else day[d]["out"]).append(a)
+    cnt = 0
+    for d in day.values():
+        ins = sorted(d["in"])
+        outs = sorted(-x for x in d["out"])
+        i = j = 0
+        while i < len(ins) and j < len(outs):
+            if abs(ins[i] - outs[j]) < 0.01:
+                cnt += 1
+                i += 1
+                j += 1
+            elif ins[i] < outs[j]:
+                i += 1
+            else:
+                j += 1
+    return cnt
 
 
 def _month_range(period, fallback):
@@ -80,7 +118,7 @@ def _month_range(period, fallback):
     return out
 
 
-def aggregate(txn, period, purpose, declared_inc=None):
+def aggregate(txn, period, purpose, declared_inc=None, industry=None):
     txns = []
     for t in txn or []:
         if t.get("type") in INTERNAL_TYPES:
@@ -177,6 +215,47 @@ def aggregate(txn, period, purpose, declared_inc=None):
     cash_in = sum(t["amt"] for t in credits if t["channel"] in CASH_CHANNELS)
     cash_inc_ratio = (cash_in / total_in) if total_in > 0 else 0.0
 
+    # 季节性经营标记（要点3/4）
+    seasonal_flag = _seasonal_flag(industry)
+
+    # 出账侧交易对手集中度（要点7）
+    cp_debit = {}
+    for t in debits:
+        key = t["cp"] or "未知"
+        cp_debit[key] = cp_debit.get(key, 0.0) + abs(t["amt"])
+    top1_debit_share = (max(cp_debit.values()) / total_out) if total_out > 0 else None
+
+    # 交易活跃度（要点1）
+    n_txn = len(txns)
+    txn_per_month = n_txn / n_month if n_month else 0.0
+
+    # 单笔最大入账占比（要点8，过桥资金弱代理）
+    max_in = max((t["amt"] for t in credits), default=0.0)
+    large_in_share = (max_in / total_in) if total_in > 0 else None
+
+    # 民间借贷/网贷对手（要点8）
+    p2p_cps = set()
+    for t in txns:
+        hay = t["cp"] + t["desc"]
+        if any(w in hay for w in P2P_WORDS):
+            p2p_cps.add(t["cp"] or t["desc"] or "未知")
+    p2p_cnt = len(p2p_cps)
+
+    # 大额现金取现（要点10）
+    large_cash_out = sum(1 for t in debits
+                         if t["channel"] in CASH_CHANNELS and abs(t["amt"]) >= LARGE_DEBIT)
+
+    # 当日等额对敲（要点8）
+    round_trip_cnt = _round_trips(txns)
+
+    # 近期入账比（要点3）：最近2个完整月 / 更早2个完整月
+    recent_in_ratio = None
+    if len(months) >= 4:
+        rec = sum(by_month.get(m, 0.0) for m in months[-2:])
+        prev = sum(by_month.get(m, 0.0) for m in months[-4:-2])
+        if prev > 0:
+            recent_in_ratio = rec / prev
+
     # 无入账时变异系数无定义 → None，而非 0
     if total_in <= 0:
         inc_cv = None
@@ -197,6 +276,14 @@ def aggregate(txn, period, purpose, declared_inc=None):
         "loan_use_dev": _r(loan_use_dev, 4),
         "night_txn_share": _r(night_txn_share, 4),
         "cash_inc_ratio": _r(cash_inc_ratio, 4),
+        "seasonal_flag": seasonal_flag,
+        "top1_debit_share": _r(top1_debit_share, 4),
+        "txn_per_month": _r(txn_per_month, 4),
+        "large_in_share": _r(large_in_share, 4),
+        "p2p_cnt": p2p_cnt,
+        "large_cash_out": large_cash_out,
+        "round_trip_cnt": round_trip_cnt,
+        "recent_in_ratio": _r(recent_in_ratio, 4),
     }
     # 供 sk_rules 做三方对账用的派生量
     meta = {
@@ -332,7 +419,8 @@ def main():
     if args.cmd == "aggregate":
         data = json.loads(open(args.input, "r", encoding="utf-8").read())
         m, meta = aggregate(data.get("txn"), data.get("period"),
-                            data.get("purpose"), data.get("declared_inc"))
+                            data.get("purpose"), data.get("declared_inc"),
+                            data.get("industry"))
         out = {"metrics": m, "meta": meta}
         txt = json.dumps(out, ensure_ascii=False, indent=2)
         if args.out:
